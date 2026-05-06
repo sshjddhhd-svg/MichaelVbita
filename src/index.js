@@ -393,6 +393,9 @@ async function main() {
   if (global._globalLock === undefined) global._globalLock = false;
   if (!global._broadcasts) global._broadcasts = new Map();
   if (!global._nicknameJobs) global._nicknameJobs = new Map();
+  if (!global._lockedNames)   global._lockedNames   = new Map();
+  if (!global._nameRestoring) global._nameRestoring = new Set();
+  if (!global._nickRestoring) global._nickRestoring = new Set();
 
   const defaults = {
     botName: "jarfis", prefix: "/", ownerID: "", adminIDs: [],
