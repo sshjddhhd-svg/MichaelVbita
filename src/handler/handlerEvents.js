@@ -130,16 +130,13 @@ module.exports = async function handlerEvents(api, event, commands) {
     const cmd     = commands.get(cmdName);
     if (!cmd) return;
 
+    // ── تجاهل تام لأي شخص ليس أدمناً — بدون أي رد ────────────────────────────
+    if (!isAdmin) return;
+
     // Permission checks — commandRoles system
     // ownerOnly is always respected
     if (cmd.config.ownerOnly && !isOwner)
       return api.sendMessage("❌ هذا الأمر للمالك فقط.", threadID);
-
-    // All commands are admin-only by default unless commandRoles marks them as "member"
-    const cmdRoles = global.config?.commandRoles || {};
-    const cmdRole  = cmdRoles[cmdName] || "admin";
-    if (cmdRole !== "member" && !isAdmin)
-      return api.sendMessage("❌ هذا الأمر لأدمن البوت فقط.\nلا يوجد مشرفو مجموعة — فقط أدمنز البوت.", threadID);
 
     // Anti-spam (skip for admins)
     if (!isAdmin) {
