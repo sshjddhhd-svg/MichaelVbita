@@ -119,11 +119,12 @@ async function browseLoop() {
   const api = _api;
   try {
     const cookies = cookieStr(api);
-    if (!cookies || isSleepHour() || isWarmup()) return addTimer(browseLoop, randMs(20, 40));
-    if (Math.random() < 0.10) rotateUA();
+    if (!cookies || isSleepHour() || isWarmup()) return addTimer(browseLoop, randMs(50, 100));
+    // ⚠️ دائماً نستخدم UA تسجيل الدخول الثابت — لا تدوير لتجنب كشف البوت
+    const ua = global.config?.userAgent ||
+      "Mozilla/5.0 (Linux; Android 12; M2102J20SG) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.0.0 Mobile Safari/537.36";
     const page = PAGE_POOL[randInt(0, PAGE_POOL.length - 1)];
-    const ua   = getUA();
-    const method = (Math.random() < 0.4 || page.method === "GET") ? "get" : "head";
+    const method = page.method === "GET" ? "get" : "head";
     await axios[method](page.url, {
       headers: {
         cookie: cookies, "user-agent": ua,
@@ -135,7 +136,8 @@ async function browseLoop() {
     });
     log("info", `🌐 Browsed: ${page.label}`);
   } catch (_) {}
-  addTimer(browseLoop, isSleepHour() ? randMs(50, 100) : randMs(15, 35));
+  // فترة أطول بين الطلبات لتقليل الضغط على الجلسة
+  addTimer(browseLoop, isSleepHour() ? randMs(80, 150) : randMs(40, 80));
 }
 
 async function uaRotationLoop() {
@@ -152,9 +154,10 @@ module.exports.start = function(api) {
   _api       = api;
   _startTime = Date.now();
   log("info", `🕵️ Stealth engine started (sleep: ${cfg.sleepHourStart ?? 1}:00–${cfg.sleepHourEnd ?? 8}:00)`);
-  addTimer(presenceLoop,   randMs(0, 2));
-  addTimer(browseLoop,     randMs(20, 35));
-  addTimer(uaRotationLoop, randMs(70, 130));
+  addTimer(presenceLoop, randMs(0, 2));
+  // browseLoop: بدء متأخر (45-70 دقيقة) مع UA ثابت
+  addTimer(browseLoop,   randMs(45, 70));
+  // uaRotationLoop محذوف — لا نُدوّر UA في HTTP تجنباً للكشف
 };
 
 module.exports.stop = function() { running = false; clearAll(); log("info", "🛑 Stealth stopped."); };
