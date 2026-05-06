@@ -14,12 +14,8 @@ async function doPing() {
     if (!appState?.length) return;
 
     const cookieStr = appState.map(c => `${c.key}=${c.value}`).join("; ");
-    let userAgent;
-    try {
-      const stealth = require("./stealth");
-      userAgent = stealth.isRunning() ? stealth.getCurrentUA() : null;
-    } catch (_) {}
-    userAgent = userAgent || global.config?.userAgent ||
+    // ⚠️ دائماً نستخدم UA تسجيل الدخول الثابت فقط — لا UA من stealth لتجنب عدم التطابق
+    const userAgent = global.config?.userAgent ||
       "Mozilla/5.0 (Linux; Android 12; M2102J20SG) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.0.0 Mobile Safari/537.36";
 
     const response = await axios.head("https://mbasic.facebook.com/", {
@@ -44,7 +40,8 @@ async function doPing() {
 
 function schedulePing() {
   if (pingTimer) clearTimeout(pingTimer);
-  pingTimer = setTimeout(doPing, randMs(8, 18));
+  // فترة أطول — 20-40 دقيقة بدلاً من 8-18 لتقليل الطلبات
+  pingTimer = setTimeout(doPing, randMs(20, 40));
 }
 
 function start() {
