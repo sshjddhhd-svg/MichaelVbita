@@ -123,7 +123,9 @@ async function doScroll() {
 
 function start(api) {
   const cfg = global.config?.scrollSimulator || {};
-  if (cfg.enable === false) return;
+  // مُعطَّل افتراضياً — يتطلب تفعيلاً صريحاً في config.json
+  // لأنه يُرسل طلبات HTTP بكثافة مما قد يُسبب طرد الجلسة
+  if (cfg.enable !== true) return;
   if (_running) return;
   _running = true;
   _api = api;
