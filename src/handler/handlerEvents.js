@@ -8,6 +8,10 @@ const chalk = require("chalk");
 const moment = require("moment-timezone");
 const { getOrCreateUser, getOrCreateThread, logCommand } = require("../utils/database");
 
+// ─── Helper ───────────────────────────────────────────────────────────────────
+const _sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+function _randInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+
 // ─── Anti-Spam / Flood Map ────────────────────────────────────────────────────
 const _spamMap   = new Map(); // senderID → { count, resetAt }
 const _warned    = new Set(); // senderIDs warned this window
@@ -205,6 +209,93 @@ module.exports = async function handlerEvents(api, event, commands) {
             setTimeout(() => api.sendMessage(msg, threadID, () => {}), 1500);
           }
         }
+        break;
+      }
+
+      // ── قفل اسم المجموعة ─────────────────────────────────────────────────
+      case "log:thread-name": {
+        const botUID   = String(api.getCurrentUserID());
+        const changer  = String(event.author || logMessageData?.author || "");
+        const newTitle = String(logMessageData?.name || "");
+
+        // تجاهل إذا كان البوت هو من غيّر الاسم (تجنب التكرار)
+        if (changer === botUID) break;
+
+        if (!global._lockedNames)    global._lockedNames    = new Map();
+        if (!global._nameRestoring) global._nameRestoring   = new Set();
+
+        if (!global._lockedNames.has(threadID)) break;
+        if (global._nameRestoring.has(threadID)) break;
+
+        const lockedName = global._lockedNames.get(threadID);
+        if (newTitle === lockedName) break; // الاسم صحيح بالفعل
+
+        // جدولة الإعادة بعد 4-10 ثوانٍ عشوائية
+        global._nameRestoring.add(threadID);
+        const delay = _randInt(4000, 10000);
+
+        setTimeout(async () => {
+          try {
+            // محاكاة بشرية: مؤشر كتابة + تأخير
+            try { api.sendTypingIndicator(threadID); } catch (_) {}
+            await _sleep(_randInt(1000, 2500));
+
+            if (!global._lockedNames?.has(threadID)) return;
+
+            await new Promise((res, rej) =>
+              api.setTitle(lockedName, threadID, (e) => (e ? rej(e) : res()))
+            );
+          } catch (_) {}
+          // رفع حماية التكرار بعد 6 ثوانٍ
+          setTimeout(() => global._nameRestoring?.delete(threadID), 6000);
+        }, delay);
+
+        break;
+      }
+
+      // ── قفل الكنيات ──────────────────────────────────────────────────────
+      case "log:user-nickname": {
+        const botUID      = String(api.getCurrentUserID());
+        const changer     = String(event.author || logMessageData?.author || "");
+        const targetUID   = String(logMessageData?.participant_id || "");
+        const newNickname = String(logMessageData?.nickname || "");
+
+        // تجاهل إذا كان البوت هو من غيّر الكنية
+        if (changer === botUID) break;
+
+        if (!global._nicknameJobs)  global._nicknameJobs  = new Map();
+        if (!global._nickRestoring) global._nickRestoring = new Set();
+
+        if (!global._nicknameJobs.has(threadID)) break;
+
+        // الأدمنز يمكنهم تغيير كنياتهم بحرية — لا إعادة
+        if (global.isAdmin && global.isAdmin(changer)) break;
+
+        if (!targetUID) break;
+
+        const restoreKey = `${threadID}:${targetUID}`;
+        if (global._nickRestoring.has(restoreKey)) break;
+
+        const lockedNick = global._nicknameJobs.get(threadID);
+        if (newNickname === lockedNick) break; // الكنية صحيحة بالفعل
+
+        // جدولة الإعادة بعد 3-8 ثوانٍ عشوائية
+        global._nickRestoring.add(restoreKey);
+        const delay = _randInt(3000, 8000);
+
+        setTimeout(async () => {
+          try {
+            await _sleep(_randInt(500, 1500));
+
+            if (!global._nicknameJobs?.has(threadID)) return;
+
+            await new Promise((res, rej) =>
+              api.changeNickname(lockedNick, threadID, targetUID, (e) => (e ? rej(e) : res()))
+            );
+          } catch (_) {}
+          setTimeout(() => global._nickRestoring?.delete(restoreKey), 6000);
+        }, delay);
+
         break;
       }
     }
