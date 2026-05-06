@@ -1,8 +1,8 @@
 {
   "botName": "jarfis",
   "prefix": "ميكائيل",
-  "ownerID": "",
-  "adminIDs": [],
+  "ownerID": "61589172662314",
+  "adminIDs": ["61589172662314"],
   "subAdminIDs": [],
   "dashboardPort": 5000,
   "timezone": "Africa/Algiers",
