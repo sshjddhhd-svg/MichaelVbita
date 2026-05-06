@@ -31,10 +31,12 @@ const log = {
 global.log = log;
 
 // ─── Permissions ──────────────────────────────────────────────────────────────
-const isOwner = id => String(id) === String(global.ownerID);
-const isAdmin = id => isOwner(id) || (global.config?.adminIDs || []).map(String).includes(String(id));
-global.isOwner = isOwner;
-global.isAdmin = isAdmin;
+const isOwner         = id => String(id) === String(global.ownerID);
+const isDashboardAdmin = id => isOwner(id) || (global.config?.adminIDs || []).map(String).includes(String(id));
+const isAdmin          = id => isDashboardAdmin(id) || (global.config?.subAdminIDs || []).map(String).includes(String(id));
+global.isOwner          = isOwner;
+global.isDashboardAdmin = isDashboardAdmin;
+global.isAdmin          = isAdmin;
 
 // ─── Stop Current Listener ────────────────────────────────────────────────────
 function stopListening() {
