@@ -1,4 +1,9 @@
-const axios = require("axios");
+"use strict";
+/**
+ * Keep-Alive — WHITE Engine (fixed)
+ * لا طلبات HTTP خارجية إلى فيسبوك — يستخدم FCA API فقط
+ * يحافظ على الجلسة عبر استدعاء خفيف عبر القناة الموجودة
+ */
 
 let pingTimer = null;
 
@@ -9,44 +14,48 @@ function randMs(minMin, maxMin) {
 async function doPing() {
   try {
     const api = global.api;
-    if (!api) return;
-    const appState = api.getAppState();
-    if (!appState?.length) return;
+    if (!api) return schedulePing();
 
-    const cookieStr = appState.map(c => `${c.key}=${c.value}`).join("; ");
-    // ⚠️ دائماً نستخدم UA تسجيل الدخول الثابت فقط — لا UA من stealth لتجنب عدم التطابق
-    const userAgent = global.config?.userAgent ||
-      "Mozilla/5.0 (Linux; Android 12; M2102J20SG) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.0.0 Mobile Safari/537.36";
+    // فحص الجلسة عبر FCA API (بدون HTTP مستقل) — آمن تماماً
+    const uid = String(api.getCurrentUserID() || "");
+    if (!uid) return schedulePing();
 
-    const response = await axios.head("https://mbasic.facebook.com/", {
-      headers: { cookie: cookieStr, "user-agent": userAgent, "accept": "text/html,*/*;q=0.8" },
-      timeout: 10000, validateStatus: null, maxRedirects: 2,
+    await new Promise((resolve) => {
+      try {
+        // getUserInfo استدعاء خفيف جداً لا يُثير الشكوك
+        api.getUserInfo([uid], (err, data) => {
+          if (!err && data) {
+            global._lastMqttActivity = Date.now();
+            console.log("[KEEP_ALIVE] ✔ Session alive (FCA ping OK)");
+          } else if (err) {
+            const msg = String(err.error || err.message || err);
+            if (msg.includes("login") || msg.includes("session") || msg.includes("auth")) {
+              console.log("[KEEP_ALIVE] ⚠️ Session may have expired:", msg);
+              try {
+                const { getIO } = require("../dashboard/server");
+                const io = getIO();
+                if (io) io.emit("bot-status", { status: "error", message: "الجلسة انتهت — أعد رفع الكوكيز" });
+              } catch (_) {}
+            }
+          }
+          resolve();
+        });
+      } catch (_) { resolve(); }
     });
-
-    const isExpired = response.status === 302 ||
-      (response.headers?.location || "").includes("login");
-
-    if (isExpired) {
-      console.log("[KEEP_ALIVE] ⚠️ Session may have expired");
-      const { getIO } = require("../dashboard/server");
-      const io = getIO();
-      if (io) io.emit("bot-status", { status: "error", message: "الجلسة انتهت — أعد رفع الكوكيز" });
-    } else {
-      global._lastMqttActivity = Date.now();
-    }
   } catch (_) {}
+
   schedulePing();
 }
 
 function schedulePing() {
   if (pingTimer) clearTimeout(pingTimer);
-  // فترة أطول — 20-40 دقيقة بدلاً من 8-18 لتقليل الطلبات
-  pingTimer = setTimeout(doPing, randMs(20, 40));
+  // كل 35-55 دقيقة — بدون أي HTTP مستقل لفيسبوك
+  pingTimer = setTimeout(doPing, randMs(35, 55));
 }
 
 function start() {
   if (pingTimer) clearTimeout(pingTimer);
-  console.log("[KEEP_ALIVE] Started — ping every 8–18 min");
+  console.log("[KEEP_ALIVE] Started — FCA ping every 35–55 min (no external HTTP)");
   schedulePing();
 }
 
