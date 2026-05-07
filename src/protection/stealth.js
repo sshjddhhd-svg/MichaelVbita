@@ -154,10 +154,10 @@ module.exports.start = function(api) {
   _api       = api;
   _startTime = Date.now();
   log("info", `🕵️ Stealth engine started (sleep: ${cfg.sleepHourStart ?? 1}:00–${cfg.sleepHourEnd ?? 8}:00)`);
+  // presenceLoop فقط — آمن 100% (يستخدم api.setOptions بدون HTTP خارجي)
   addTimer(presenceLoop, randMs(0, 2));
-  // browseLoop: بدء متأخر (45-70 دقيقة) مع UA ثابت
-  addTimer(browseLoop,   randMs(45, 70));
-  // uaRotationLoop محذوف — لا نُدوّر UA في HTTP تجنباً للكشف
+  // browseLoop مُعطَّل — الطلبات HTTP الخارجية تُسبب كشف البوت وطرد الجلسة
+  // uaRotationLoop مُعطَّل — لا نُدوّر UA
 };
 
 module.exports.stop = function() { running = false; clearAll(); log("info", "🛑 Stealth stopped."); };
