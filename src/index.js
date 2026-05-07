@@ -355,6 +355,35 @@ global.reLoginBot = async function () {
   log.warn("🔄 Hot-Swap: إعادة تسجيل الدخول…");
   await startBot();
 };
+// alias للتوافق مع mqttHealthCheck القديم
+global._reLoginBot = global.reLoginBot;
+
+// ─── Soft Restart (listener فقط — بدون re-login) ──────────────────────────────
+global.restartListener = async function () {
+  const api = global.api;
+  if (!api) { log.warn("restartListener: لا يوجد api — سيتم re-login"); return global.reLoginBot(); }
+  log.warn("🔄 Soft restart: إعادة تشغيل الـ listener بدون re-login…");
+  stopListening();
+  await new Promise(r => setTimeout(r, 2000 + Math.random() * 2000));
+  const hasMsess = api.getAppState?.()?.some(c => c.key === "m_sess") || false;
+  if (hasMsess) {
+    startMqtt(api, global.commands, 1);
+  } else {
+    startPolling(api, global.commands, 1);
+  }
+  global._lastMqttActivity = Date.now();
+  log.ok("🔄 Soft restart تم ✔");
+};
+
+// ─── Crash Recovery ────────────────────────────────────────────────────────────
+process.on("uncaughtException", (err) => {
+  log.error(`[CRASH] uncaughtException: ${err?.message || err}`);
+  // لا نوقف البوت — فقط نسجّل الخطأ
+});
+process.on("unhandledRejection", (reason) => {
+  log.error(`[CRASH] unhandledRejection: ${reason?.message || reason}`);
+  // لا نوقف البوت
+});
 
 // ─── Cron Jobs ────────────────────────────────────────────────────────────────
 function setupCronJobs(api) {
