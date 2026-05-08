@@ -83,20 +83,26 @@ function ghRequest(method, endpoint, body = null) {
   });
 }
 
+function encodePath(filePath) {
+  return filePath.split("/").map(segment => encodeURIComponent(segment)).join("/");
+}
+
 async function getFileSha(filePath) {
-  const res = await ghRequest("GET", `/contents/${filePath}?ref=${BRANCH}`);
+  const encoded = encodePath(filePath);
+  const res = await ghRequest("GET", `/contents/${encoded}?ref=${BRANCH}`);
   if (res.status === 200 && res.data.sha) return res.data.sha;
   return null;
 }
 
 async function upsertFile(filePath, content, sha) {
+  const encoded = encodePath(filePath);
   const body = {
     message: `chore: update ${filePath}`,
     content: Buffer.from(content).toString("base64"),
     branch:  BRANCH,
   };
   if (sha) body.sha = sha;
-  return ghRequest("PUT", `/contents/${filePath}`, body);
+  return ghRequest("PUT", `/contents/${encoded}`, body);
 }
 
 async function ensureBranch() {
