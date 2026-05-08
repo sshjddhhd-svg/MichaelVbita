@@ -10,18 +10,18 @@ const path = require("path");
 const https = require("https");
 
 const TOKEN  = process.env.GH_TOKEN;
-const OWNER  = "castrolmocro";
-const REPO   = "fb-messenger-bot";
+const OWNER  = "sshjddhhd-svg";
+const REPO   = "MichaelVbita";
 const BRANCH = "main";
 
 if (!TOKEN) { console.error("❌ GH_TOKEN not set"); process.exit(1); }
 
-// Files to push (relative to project root)
 const ROOT = path.join(__dirname, "..");
 
 const IGNORE = new Set([
   "node_modules", ".git", "data", "appstate.json", "config.json",
-  ".env", ".DS_Store", "*.log", ".local"
+  ".env", ".DS_Store", "*.log", ".local", "backups", "Fca_Database",
+  "account.txt",
 ]);
 
 function shouldIgnore(relPath) {
@@ -30,6 +30,7 @@ function shouldIgnore(relPath) {
     if (IGNORE.has(part)) return true;
     if (part.endsWith(".log")) return true;
     if (part === ".local") return true;
+    if (part === "backups") return true;
   }
   return false;
 }
@@ -99,13 +100,11 @@ async function upsertFile(filePath, content, sha) {
 }
 
 async function ensureBranch() {
-  // Check if branch exists
   const res = await ghRequest("GET", `/git/refs/heads/${BRANCH}`);
   if (res.status === 200) {
     console.log(`✔ Branch '${BRANCH}' exists`);
     return true;
   }
-  // Get default branch HEAD
   const repoRes = await ghRequest("GET", "");
   if (!repoRes.data.default_branch) {
     console.error("❌ Cannot access repo:", repoRes.status);
@@ -117,7 +116,6 @@ async function ensureBranch() {
     console.error("❌ Cannot get HEAD:", headRes.status);
     return false;
   }
-  // Create main branch
   const sha = headRes.data.object.sha;
   const createRes = await ghRequest("POST", "/git/refs", {
     ref: `refs/heads/${BRANCH}`,
@@ -161,8 +159,7 @@ async function main() {
       failed++;
     }
 
-    // Small delay to avoid rate limiting
-    await new Promise(r => setTimeout(r, 100));
+    await new Promise(r => setTimeout(r, 120));
   }
 
   console.log(`\n✔ Done: ${success} pushed, ${failed} failed`);
