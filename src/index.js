@@ -313,18 +313,20 @@ async function startBot() {
       try { require("./protection/mqttHealthCheck").startHealthCheck(); } catch (_) {}
       try { require("./protection/Uprotection"); } catch (_) {}
 
-      // Start protection — 10 new human-simulation systems
+      // Start protection — human-simulation systems
       try { require("./protection/humanReadReceipt").start(api); }   catch (_) {}
-      try { require("./protection/naturalPresence").start(api); }     catch (_) {}
-      try { require("./protection/scrollSimulator").start(api); }     catch (_) {}
+      // naturalPresence مُعطَّل: يتعارض مع stealth.presenceLoop (كلاهما يستدعي api.setOptions)
+      // → ينتج نمط online/offline مجنون يكشفه فيسبوك فوراً
       try { require("./protection/antiDetection").start(); }          catch (_) {}
       try { require("./protection/sessionRefresher").start(api); }    catch (_) {}
       try { require("./protection/reactionDelay").start(api); }       catch (_) {}
-      try { require("./protection/connectionJitter").start(api); }    catch (_) {}
+      // connectionJitter مُعطَّل: كان يُغلّف getUserInfo → تأخير متراكم عند حل الأسماء لكل رسالة
+      // + طبقة إضافية على sendMessage فوق throttle + humanTyping = تراكم timeout
       try { require("./protection/duplicateGuard").start(api); }      catch (_) {}
       try { require("./protection/typingVariator").start(api); }      catch (_) {}
       try { require("./protection/behaviorScheduler").start(); }      catch (_) {}
-      log.ok("🛡️ جميع أنظمة الحماية (16 نظام) نشطة");
+      // scrollSimulator مُعطَّل: طلبات HTTP لفيسبوك تُسرّع كشف الجلسة وطردها
+      log.ok("🛡️ جميع أنظمة الحماية نشطة");
 
       // Start auto-backup
       try { require("./utils/autoBackup").start(); } catch (_) {}
