@@ -42,7 +42,7 @@ const UA_POOL = [
   "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36",
   "Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Mobile Safari/537.36",
   "Mozilla/5.0 (Linux; Android 13; Redmi Note 12) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36",
-  "Mozilla/5.0 (Linux; Android 12; M2102J20SG) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36",
+  "Mozilla/5.0 (Linux; Android 12; M2102J20SG) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.0.0 Mobile Safari/537.36",
   "Mozilla/5.0 (Linux; Android 14; OnePlus 12) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36",
   "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1",
   "Mozilla/5.0 (iPhone; CPU iPhone OS 17_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3 Mobile/15E148 Safari/604.1",
@@ -72,6 +72,9 @@ let _api    = null;
 let _startTime = Date.now();
 const _timers = [];
 
+// ─── آخر حالة حضور أُرسلت لمنع الاستدعاءات المكررة ───────────────────────
+let _lastPresenceState = null;
+
 function addTimer(fn, ms) {
   const id = setTimeout(() => { const i = _timers.indexOf(id); if (i !== -1) _timers.splice(i, 1); fn(); }, ms);
   _timers.push(id);
@@ -89,61 +92,50 @@ async function presenceLoop() {
   const api = _api;
   try {
     if (isSleepHour()) {
-      try { api.setOptions({ online: false }); } catch (_) {}
-      log("info", "🌙 Sleep — presence: offline");
-      return addTimer(presenceLoop, randMs(25, 55));
+      if (_lastPresenceState !== "offline") {
+        try { api.setOptions({ online: false }); } catch (_) {}
+        _lastPresenceState = "offline";
+        log("info", "🌙 Sleep — presence: offline");
+      }
+      // فترة أطول في وقت النوم: 30-60 دقيقة (تقليل استدعاءات api.setOptions)
+      return addTimer(presenceLoop, randMs(30, 60));
     }
     if (isWarmup()) {
-      try { api.setOptions({ online: false }); } catch (_) {}
-      return addTimer(presenceLoop, randMs(3, 8));
+      if (_lastPresenceState !== "offline") {
+        try { api.setOptions({ online: false }); } catch (_) {}
+        _lastPresenceState = "offline";
+      }
+      return addTimer(presenceLoop, randMs(5, 10));
     }
     const roll = Math.random();
+    let newState;
+    let nextInterval;
+
     if (roll < 0.50) {
-      try { api.setOptions({ online: true }); } catch (_) {}
-      log("info", "🟢 Presence → online");
-      addTimer(presenceLoop, randMs(6, 18));
+      newState = "online";
+      nextInterval = randMs(12, 25); // 12-25 دقيقة (زيادة من 6-18)
     } else if (roll < 0.80) {
-      try { api.setOptions({ online: false }); } catch (_) {}
-      log("info", "💤 Presence → idle");
-      addTimer(presenceLoop, randMs(5, 15));
+      newState = "idle";
+      nextInterval = randMs(10, 20); // 10-20 دقيقة (زيادة من 5-15)
     } else {
-      try { api.setOptions({ online: false }); } catch (_) {}
-      log("info", "📴 Presence → offline break");
-      addTimer(presenceLoop, randMs(10, 25));
+      newState = "offline_break";
+      nextInterval = randMs(15, 30); // 15-30 دقيقة (زيادة من 10-25)
     }
-  } catch (_) { addTimer(presenceLoop, randMs(10, 20)); }
-}
 
-async function browseLoop() {
-  if (!running) return;
-  const api = _api;
-  try {
-    const cookies = cookieStr(api);
-    if (!cookies || isSleepHour() || isWarmup()) return addTimer(browseLoop, randMs(50, 100));
-    // ⚠️ دائماً نستخدم UA تسجيل الدخول الثابت — لا تدوير لتجنب كشف البوت
-    const ua = global.config?.userAgent ||
-      "Mozilla/5.0 (Linux; Android 12; M2102J20SG) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.0.0 Mobile Safari/537.36";
-    const page = PAGE_POOL[randInt(0, PAGE_POOL.length - 1)];
-    const method = page.method === "GET" ? "get" : "head";
-    await axios[method](page.url, {
-      headers: {
-        cookie: cookies, "user-agent": ua,
-        "accept": "text/html,*/*;q=0.8",
-        "accept-language": "ar-DZ,ar;q=0.9,en;q=0.8",
-        "cache-control": "no-cache",
-      },
-      timeout: 12000, validateStatus: null, maxRedirects: 3,
-    });
-    log("info", `🌐 Browsed: ${page.label}`);
-  } catch (_) {}
-  // فترة أطول بين الطلبات لتقليل الضغط على الجلسة
-  addTimer(browseLoop, isSleepHour() ? randMs(80, 150) : randMs(40, 80));
-}
+    // لا نستدعي api.setOptions إذا الحالة لم تتغير → تقليل الضوضاء
+    if (newState !== _lastPresenceState) {
+      if (newState === "online") {
+        try { api.setOptions({ online: true }); } catch (_) {}
+        log("info", "🟢 Presence → online");
+      } else {
+        try { api.setOptions({ online: false }); } catch (_) {}
+        log("info", newState === "idle" ? "💤 Presence → idle" : "📴 Presence → offline break");
+      }
+      _lastPresenceState = newState;
+    }
 
-async function uaRotationLoop() {
-  if (!running) return;
-  rotateUA();
-  addTimer(uaRotationLoop, randMs(60, 180));
+    addTimer(presenceLoop, nextInterval);
+  } catch (_) { addTimer(presenceLoop, randMs(15, 25)); }
 }
 
 module.exports.start = function(api) {
@@ -153,14 +145,18 @@ module.exports.start = function(api) {
   running    = true;
   _api       = api;
   _startTime = Date.now();
+  _lastPresenceState = null;
   log("info", `🕵️ Stealth engine started (sleep: ${cfg.sleepHourStart ?? 1}:00–${cfg.sleepHourEnd ?? 8}:00)`);
-  // presenceLoop فقط — آمن 100% (يستخدم api.setOptions بدون HTTP خارجي)
-  addTimer(presenceLoop, randMs(0, 2));
-  // browseLoop مُعطَّل — الطلبات HTTP الخارجية تُسبب كشف البوت وطرد الجلسة
-  // uaRotationLoop مُعطَّل — لا نُدوّر UA
+  // presenceLoop فقط — آمن 100%، فترات أطول لتقليل api.setOptions calls
+  addTimer(presenceLoop, randMs(3, 8)); // أول تغيير بعد 3-8 دقائق
 };
 
-module.exports.stop = function() { running = false; clearAll(); log("info", "🛑 Stealth stopped."); };
+module.exports.stop = function() {
+  running = false;
+  _lastPresenceState = null;
+  clearAll();
+  log("info", "🛑 Stealth stopped.");
+};
 module.exports.isRunning   = () => running;
 module.exports.getCurrentUA = getUA;
 module.exports.jitter = (ms) => Math.round(ms * (0.85 + Math.random() * 0.30));
