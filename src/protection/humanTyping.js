@@ -7,20 +7,40 @@
  * أي أمر (حالي أو مستقبلي) يستدعي api.sendMessage
  * سيحصل تلقائياً على مؤشر الكتابة + تأخير واقعي
  * بدون أي تعديل في كود الأمر.
+ *
+ * إصلاح v2: cooldown للـ typing indicator لكل thread
+ * منع spam مؤشر الكتابة عند الأوامر المتعددة المتزامنة
  */
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// ─── Cooldown map: threadID → last typing indicator timestamp ──────────────
+// نتجنب إرسال typing indicator إذا أُرسل منذ أقل من TYPING_COOLDOWN_MS
+const _typingLastSent = new Map();
+const TYPING_COOLDOWN_MS = 5000; // 5 ثوانٍ
+
+function canSendTyping(threadID) {
+  const last = _typingLastSent.get(String(threadID)) || 0;
+  return (Date.now() - last) >= TYPING_COOLDOWN_MS;
+}
+
+function markTypingSent(threadID) {
+  _typingLastSent.set(String(threadID), Date.now());
+}
+
+// تنظيف دوري لمنع تراكم الـ map
+setInterval(() => {
+  const cutoff = Date.now() - 60000;
+  for (const [k, v] of _typingLastSent.entries()) {
+    if (v < cutoff) _typingLastSent.delete(k);
+  }
+}, 30000);
 
 // ─── حساب مدة الكتابة بناءً على طول النص ──────────────────────────────────
 function randInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-/**
- * يستخرج النص من أي صيغة رسالة
- * @param {string|object} msg
- * @returns {string}
- */
 function extractText(msg) {
   if (!msg) return "";
   if (typeof msg === "string") return msg;
@@ -32,45 +52,39 @@ function extractText(msg) {
 
 /**
  * يحسب مدة الكتابة الواقعية بناءً على طول النص
- * متوسط إنسان: ~40 كلمة/دقيقة = ~200 حرف/دقيقة
- * البوت "يفكر" أسرع — نستخدم 25-50ms لكل حرف مع تشويش
- * @param {string} text
- * @returns {number} milliseconds
+ * تخفيض الحد الأقصى من 7000ms → 3500ms لتقليل التراكم
  */
 function calcTypingDelay(text) {
   const len = (text || "").length;
-  if (len === 0) return randInt(600, 1200);
+  if (len === 0) return randInt(400, 900);
 
-  // 35ms لكل حرف، حد أدنى 700ms، حد أقصى 7000ms
-  const base = Math.min(Math.max(len * 35, 700), 7000);
+  // 28ms لكل حرف، حد أدنى 500ms، حد أقصى 3500ms (خُفِّض من 7000)
+  const base = Math.min(Math.max(len * 28, 500), 3500);
 
-  // تشويش ±25% لمحاكاة الطباعة غير المنتظمة
-  const jitter = base * (0.75 + Math.random() * 0.50);
+  // تشويش ±20%
+  const jitter = base * (0.80 + Math.random() * 0.40);
 
   return Math.round(jitter);
 }
 
-// ─── إرسال مؤشر الكتابة ─────────────────────────────────────────────────────
+// ─── إرسال مؤشر الكتابة مع cooldown ────────────────────────────────────────
 async function sendTypingIndicator(api, threadID) {
+  // تجاهل إذا أُرسل مؤخراً لنفس الـ thread
+  if (!canSendTyping(threadID)) return;
+
   try {
+    markTypingSent(threadID);
     await new Promise((resolve) => {
-      // بعض إصدارات fca ترجع promise وبعضها callback
       const result = api.sendTypingIndicator(threadID, () => resolve());
       if (result && typeof result.then === "function") {
         result.then(resolve).catch(resolve);
       }
-      // ضمان الحل في كل الأحوال
       setTimeout(resolve, 500);
     });
   } catch (_) {}
 }
 
 // ─── المحاكاة الكاملة: مؤشر + انتظار ─────────────────────────────────────
-/**
- * @param {object} api
- * @param {string} threadID
- * @param {string|object} msg  - الرسالة التي ستُرسل (لحساب الطول)
- */
 async function simulateTyping(api, threadID, msg) {
   const cfg = global.config?.humanTyping || {};
   if (cfg.enable === false) return;
@@ -78,57 +92,39 @@ async function simulateTyping(api, threadID, msg) {
   const text = extractText(msg);
   const delay = calcTypingDelay(text);
 
-  // أرسل مؤشر الكتابة
+  // أرسل مؤشر الكتابة (مع cooldown — لن يُرسَل إذا أُرسل منذ أقل من 5 ثوانٍ)
   await sendTypingIndicator(api, threadID);
 
   // انتظر المدة الواقعية
   await sleep(delay);
 
-  // وقفة صغيرة قبل الإرسال (كأن الإنسان يراجع الرسالة)
-  await sleep(randInt(150, 450));
+  // وقفة صغيرة قبل الإرسال
+  await sleep(randInt(100, 300));
 }
 
 // ─── تغليف api.sendMessage ─────────────────────────────────────────────────
-/**
- * يُغلّف api.sendMessage بحيث يُظهر الكتابة تلقائياً قبل كل رسالة.
- * يُستدعى مرة واحدة بعد تسجيل الدخول (وبعد كل hot-swap).
- * @param {object} api
- */
 function wrapWithTyping(api) {
-  // منع التغليف المزدوج
   if (api.__typingWrapped) {
     console.log("[HUMAN_TYPING] ⚡ Already wrapped — skipping");
     return;
   }
   api.__typingWrapped = true;
 
-  // احتفظ بالدالة الأصلية
   const _originalSend = api.sendMessage.bind(api);
 
-  /**
-   * النسخة المُغلَّفة من sendMessage
-   * تدعم جميع أشكال الاستدعاء:
-   *   sendMessage(msg, threadID)
-   *   sendMessage(msg, threadID, callback)
-   *   sendMessage(msg, threadID, callback, messageID)   ← reply
-   */
   api.sendMessage = async function wrappedSendMessage(msg, threadID, callback, messageID) {
-    // محاكاة الكتابة (ستُتخطى إذا كانت معطّلة في الإعدادات)
     try {
       await simulateTyping(api, threadID, msg);
     } catch (_) {}
 
-    // أرسل الرسالة الفعلية
     return _originalSend(msg, threadID, callback, messageID);
   };
 
-  console.log("[HUMAN_TYPING] ✅ api.sendMessage wrapped — typing simulation active for ALL commands");
+  console.log("[HUMAN_TYPING] ✅ api.sendMessage wrapped — typing simulation active (cooldown: 5s/thread)");
 }
 
-// ─── إلغاء التغليف (للاستخدام الداخلي عند hot-swap) ───────────────────────
 function unwrapTyping(api) {
   if (!api.__typingWrapped) return;
-  // ليس ضرورياً إلغاء التغليف — hot-swap يُنشئ api جديد دائماً
   delete api.__typingWrapped;
 }
 
