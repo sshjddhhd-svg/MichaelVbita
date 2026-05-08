@@ -218,24 +218,23 @@ module.exports = async function handlerEvents(api, event, commands) {
         // تجاهل إذا كان البوت هو من غيّر الاسم (تجنب التكرار)
         if (changer === botUID) break;
 
-        if (!global._lockedNames)    global._lockedNames    = new Map();
-        if (!global._nameRestoring) global._nameRestoring   = new Set();
+        if (!global._lockedNames)    global._lockedNames   = new Map();
+        if (!global._nameRestoring)  global._nameRestoring = new Set();
 
         if (!global._lockedNames.has(threadID)) break;
         if (global._nameRestoring.has(threadID)) break;
 
         const lockedName = global._lockedNames.get(threadID);
-        if (newTitle === lockedName) break; // الاسم صحيح بالفعل
+        if (!lockedName) break;
+        if (newTitle === lockedName) break;
 
-        // جدولة الإعادة بعد 4-10 ثوانٍ عشوائية
+        // إعادة فورية — تأخير قصير فقط لتجنب الحلقة
         global._nameRestoring.add(threadID);
-        const delay = _randInt(4000, 10000);
 
         setTimeout(async () => {
           try {
-            // محاكاة بشرية: مؤشر كتابة + تأخير
             try { api.sendTypingIndicator(threadID); } catch (_) {}
-            await _sleep(_randInt(1000, 2500));
+            await _sleep(_randInt(800, 2000));
 
             if (!global._lockedNames?.has(threadID)) return;
 
@@ -243,9 +242,8 @@ module.exports = async function handlerEvents(api, event, commands) {
               api.setTitle(lockedName, threadID, (e) => (e ? rej(e) : res()))
             );
           } catch (_) {}
-          // رفع حماية التكرار بعد 6 ثوانٍ
-          setTimeout(() => global._nameRestoring?.delete(threadID), 6000);
-        }, delay);
+          setTimeout(() => global._nameRestoring?.delete(threadID), 5000);
+        }, _randInt(1500, 3500));
 
         break;
       }
@@ -260,38 +258,56 @@ module.exports = async function handlerEvents(api, event, commands) {
         // تجاهل إذا كان البوت هو من غيّر الكنية
         if (changer === botUID) break;
 
-        if (!global._nicknameJobs)  global._nicknameJobs  = new Map();
-        if (!global._nickRestoring) global._nickRestoring = new Set();
+        if (!global._perMemberNicknames)  global._perMemberNicknames  = new Map();
+        if (!global._nicknameJobs)        global._nicknameJobs        = new Map();
+        if (!global._nickRestoring)       global._nickRestoring       = new Set();
 
-        if (!global._nicknameJobs.has(threadID)) break;
-
-        // الأدمنز يمكنهم تغيير كنياتهم بحرية — لا إعادة
-        if (global.isAdmin && global.isAdmin(changer)) break;
+        // هل يوجد قفل في هذه المجموعة؟
+        const memberMap = global._perMemberNicknames.get(threadID);
+        const hasLock   = memberMap && memberMap.size > 0;
+        if (!hasLock && !global._nicknameJobs.has(threadID)) break;
 
         if (!targetUID) break;
 
-        const restoreKey = `${threadID}:${targetUID}`;
+        // ── إذا كان المغيِّر أدمناً → احفظ تغييره كقفل جديد ────────────────
+        const changerIsAdmin = global.isAdmin ? global.isAdmin(changer) : false;
+        if (changerIsAdmin) {
+          if (memberMap) {
+            // تحديث الكنية المقفلة لهذا العضو بالتحديد
+            memberMap.set(targetUID, newNickname);
+          }
+          // تحديث nicknameJobs للتوافق
+          // (لا نغير الـ global lock لأنه يخص العضو فقط)
+          break;
+        }
+
+        // ── إذا كان غير أدمن → أعد الكنية فوراً ────────────────────────────
+        const restoreKey  = `${threadID}:${targetUID}`;
         if (global._nickRestoring.has(restoreKey)) break;
 
-        const lockedNick = global._nicknameJobs.get(threadID);
-        if (newNickname === lockedNick) break; // الكنية صحيحة بالفعل
+        // ابحث عن الكنية المقفلة لهذا العضو
+        const lockedNick = memberMap?.get(targetUID) ?? global._nicknameJobs.get(threadID);
+        if (!lockedNick && lockedNick !== "") break;
+        if (newNickname === lockedNick) break;
 
-        // جدولة الإعادة بعد 3-8 ثوانٍ عشوائية
         global._nickRestoring.add(restoreKey);
-        const delay = _randInt(3000, 8000);
 
         setTimeout(async () => {
           try {
-            await _sleep(_randInt(500, 1500));
+            await _sleep(_randInt(500, 1800));
 
-            if (!global._nicknameJobs?.has(threadID)) return;
+            const currentMap = global._perMemberNicknames?.get(threadID);
+            if (!currentMap?.has(targetUID) && !global._nicknameJobs?.has(threadID)) return;
+
+            const nick = currentMap?.get(targetUID) ?? global._nicknameJobs?.get(threadID);
+            if (nick === undefined) return;
 
             await new Promise((res, rej) =>
-              api.changeNickname(lockedNick, threadID, targetUID, (e) => (e ? rej(e) : res()))
+              api.changeNickname(nick, threadID, targetUID, (e) => (e ? rej(e) : res()))
             );
           } catch (_) {}
-          setTimeout(() => global._nickRestoring?.delete(restoreKey), 6000);
-        }, delay);
+          setTimeout(() => global._nickRestoring?.delete(restoreKey), 5000);
+        }, _randInt(1500, 4000));
 
         break;
       }
