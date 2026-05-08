@@ -215,35 +215,48 @@ module.exports = async function handlerEvents(api, event, commands) {
         const changer  = String(event.author || logMessageData?.author || "");
         const newTitle = String(logMessageData?.name || "");
 
-        // تجاهل إذا كان البوت هو من غيّر الاسم (تجنب التكرار)
+        // تجاهل إذا كان البوت هو من غيّر الاسم
         if (changer === botUID) break;
 
-        if (!global._lockedNames)    global._lockedNames   = new Map();
-        if (!global._nameRestoring)  global._nameRestoring = new Set();
+        if (!global._lockedNames)     global._lockedNames     = new Map();
+        if (!global._nameRestoringAt) global._nameRestoringAt = new Map();
 
         if (!global._lockedNames.has(threadID)) break;
-        if (global._nameRestoring.has(threadID)) break;
 
         const lockedName = global._lockedNames.get(threadID);
         if (!lockedName) break;
         if (newTitle === lockedName) break;
 
-        // إعادة فورية — تأخير قصير فقط لتجنب الحلقة
-        global._nameRestoring.add(threadID);
+        // استخدم دوال الأمر المشتركة إن كانت متاحة
+        const _ops = global._nameOps || {};
+        const _isR   = _ops._isRestoring   || ((tid) => { const t = global._nameRestoringAt?.get(tid); return !!t && (Date.now() - t) < 2500; });
+        const _markR = _ops._markRestoring  || ((tid) => { if (!global._nameRestoringAt) global._nameRestoringAt = new Map(); global._nameRestoringAt.set(tid, Date.now()); });
+        const _clearR= _ops._unmarkRestoring|| ((tid) => global._nameRestoringAt?.delete(tid));
+        const _doR   = _ops._doRestore      || (async (tid, name) => {
+          for (let i = 0; i < 5; i++) {
+            const _a = global.api;
+            if (!_a) { await _sleep(2000); continue; }
+            if (!global._lockedNames?.has(tid)) return;
+            try {
+              await new Promise((res, rej) => _a.setTitle(name, tid, (e) => (e ? rej(e) : res())));
+              return;
+            } catch (_) { if (i < 4) await _sleep(1500 * (i + 1)); }
+          }
+        });
 
-        setTimeout(async () => {
+        // إذا كانت إعادة جارية (بدأت منذ أقل من 2.5 ث) → تخطَّ
+        if (_isR(threadID)) break;
+
+        // ابدأ الإعادة: تأخير عشوائي 2-5 ثوانٍ
+        _markR(threadID);
+        (async () => {
           try {
-            try { api.sendTypingIndicator(threadID); } catch (_) {}
-            await _sleep(_randInt(800, 2000));
-
-            if (!global._lockedNames?.has(threadID)) return;
-
-            await new Promise((res, rej) =>
-              api.setTitle(lockedName, threadID, (e) => (e ? rej(e) : res()))
-            );
+            await _sleep(_randInt(2000, 5000));
+            if (!global._lockedNames?.has(threadID)) { _clearR(threadID); return; }
+            await _doR(threadID, lockedName);
           } catch (_) {}
-          setTimeout(() => global._nameRestoring?.delete(threadID), 5000);
-        }, _randInt(1500, 3500));
+          _clearR(threadID);
+        })();
 
         break;
       }
