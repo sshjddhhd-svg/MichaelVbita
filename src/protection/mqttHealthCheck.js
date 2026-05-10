@@ -1,10 +1,9 @@
 "use strict";
 /**
- * MQTT Health Check — WHITE Engine (fixed v2)
- * - silence timeout: 60 min (رُفع من 45 → أقل تدخلاً)
- * - قبل إعادة الدخول الكامل: يتحقق من صلاحية الجلسة عبر getUserInfo
- * - يحاول soft restart أولاً (3 مرات) قبل اللجوء لإعادة الدخول
- * - لا يُعيد الدخول إلا إذا ثبت انتهاء الجلسة فعلاً
+ * MQTT Health Check — WHITE Engine (V1 original)
+ * - silence timeout: 45 min — صمت المجموعة طبيعي
+ * - يحاول إعادة تشغيل الـ listener فقط أولاً (بدون re-login)
+ * - يلجأ لـ reLoginBot فقط كآخر خيار
  */
 
 let healthTimer    = null;
@@ -18,11 +17,11 @@ function getConfig() {
   const cfg = global.config?.mqttHealthCheck || {};
   return {
     enable:             cfg.enable !== false,
-    // 60 دقيقة — لا نتدخل إلا إذا صمت فعلاً مدة طويلة
-    silentTimeoutMs:    (cfg.silentTimeoutMinutes    || 60) * 60_000,
-    checkIntervalMinMs: (cfg.checkIntervalMinMinutes || 18) * 60_000,
-    checkIntervalMaxMs: (cfg.checkIntervalMaxMinutes || 28) * 60_000,
-    maxRestarts:        cfg.maxRestarts     || 4,
+    // 45 دقيقة — الصمت الطبيعي للمجموعة لا يعني موت الاتصال
+    silentTimeoutMs:    (cfg.silentTimeoutMinutes    || 45) * 60_000,
+    checkIntervalMinMs: (cfg.checkIntervalMinMinutes || 15) * 60_000,
+    checkIntervalMaxMs: (cfg.checkIntervalMaxMinutes || 25) * 60_000,
+    maxRestarts:        cfg.maxRestarts     || 3,
     backoffMultiplier:  cfg.backoffMultiplier || 2,
     maxBackoffMs:       (cfg.maxBackoffMinutes || 30) * 60_000,
   };
@@ -35,38 +34,6 @@ function notifyOwner(msg) {
     if (!api || !owner) return;
     api.sendMessage(msg, owner, () => {});
   } catch (_) {}
-}
-
-// ─── تحقق من صلاحية الجلسة قبل اتخاذ قرار إعادة الدخول ─────────────────────
-async function isSessionAlive() {
-  const api = global.api;
-  if (!api) return false;
-  const uid = String(api.getCurrentUserID() || "");
-  if (!uid) return false;
-
-  return new Promise((resolve) => {
-    try {
-      api.getUserInfo([uid], (err, data) => {
-        if (!err && data) {
-          // الجلسة حية — حدّث الطوابع الزمنية
-          global._lastActivity     = Date.now();
-          global._lastMqttActivity = Date.now();
-          resolve(true);
-        } else {
-          const msg = String(err?.error || err?.message || err || "");
-          const isAuth = msg.toLowerCase().includes("login") ||
-                         msg.toLowerCase().includes("session") ||
-                         msg.toLowerCase().includes("auth") ||
-                         msg.toLowerCase().includes("checkpoint") ||
-                         msg.toLowerCase().includes("logged");
-          // إذا كان خطأ auth → الجلسة منتهية | إذا شبكي → نعتبرها حية
-          resolve(!isAuth);
-        }
-      });
-    } catch (_) { resolve(false); }
-    // timeout 15s إذا لم يرد FCA
-    setTimeout(() => resolve(null), 15000);
-  });
 }
 
 async function doHealthCheck() {
@@ -85,7 +52,8 @@ async function doHealthCheck() {
   }
 
   if (restartCount >= cfg.maxRestarts) {
-    console.log(`[MQTT_HEALTH] Max restarts (${cfg.maxRestarts}) — pausing 1 hour`);
+    console.log(`[MQTT_HEALTH] Max restarts (${cfg.maxRestarts}) — giving up for this cycle`);
+    // إعادة الضبط بعد ساعة والمحاولة مجدداً بدلاً من التوقف نهائياً
     restartCount = 0;
     backoffMs    = 0;
     global._lastMqttActivity = Date.now();
@@ -99,42 +67,29 @@ async function doHealthCheck() {
   const silentMin = Math.round(silentFor / 60000);
   console.log(`[MQTT_HEALTH] Silent ${silentMin} min — attempt ${restartCount}/${cfg.maxRestarts}`);
 
-  // ── محاولة 1 و 2 و 3: تحقق من الجلسة أولاً ─────────────────────────────────
-  if (restartCount <= 3) {
-    console.log(`[MQTT_HEALTH] Checking session validity before action…`);
-    const alive = await isSessionAlive();
-
-    if (alive === true) {
-      // الجلسة حية — فقط الـ listener صامت، أعده
-      console.log(`[MQTT_HEALTH] Session alive ✔ — doing soft listener restart`);
-      global._lastMqttActivity = Date.now();
-      try {
-        if (typeof global.restartListener === "function") await global.restartListener();
-      } catch (e) {
-        console.log(`[MQTT_HEALTH] Soft restart error: ${e?.message || e}`);
+  // ── محاولة 1 و 2: إعادة تشغيل الـ listener بدون re-login ──────────────────
+  if (restartCount <= 2) {
+    console.log(`[MQTT_HEALTH] Trying soft restart (listener only)…`);
+    try {
+      if (typeof global.restartListener === "function") {
+        global._lastMqttActivity = Date.now();
+        await global.restartListener();
+        console.log("[MQTT_HEALTH] Soft restart done ✔");
+      } else {
+        global._lastMqttActivity = Date.now();
       }
-    } else if (alive === null) {
-      // timeout — شبكة بطيئة، حدّث الطابع فقط
-      console.log(`[MQTT_HEALTH] Session check timeout — assuming alive, updating timestamp`);
-      global._lastMqttActivity = Date.now();
-    } else {
-      // الجلسة منتهية فعلاً
-      console.log(`[MQTT_HEALTH] Session expired — escalating to re-login`);
-      restartCount = cfg.maxRestarts; // اقفز مباشرة لإعادة الدخول
+    } catch (e) {
+      console.log(`[MQTT_HEALTH] Soft restart error: ${e?.message || e}`);
     }
-  }
-
-  // ── المحاولة الأخيرة: إعادة تسجيل الدخول الكامل ─────────────────────────────
-  if (restartCount >= cfg.maxRestarts) {
-    console.log(`[MQTT_HEALTH] Full re-login…`);
-    notifyOwner(`⚠️ البوت: إعادة الاتصال بعد ${silentMin} دقيقة انقطاع…`);
+  } else {
+    // ── محاولة 3 (أخيرة): إعادة تسجيل الدخول الكامل ────────────────────────
+    console.log(`[MQTT_HEALTH] Trying full re-login…`);
+    notifyOwner(`⚠️ البوت: جاري إعادة الاتصال بعد ${silentMin} دقيقة انقطاع…`);
     try {
       const reLogin = global.reLoginBot || global._reLoginBot;
       if (typeof reLogin === "function") {
         global._lastMqttActivity = Date.now();
         await reLogin();
-        restartCount = 0;
-        backoffMs    = 0;
       }
     } catch (e) {
       console.log(`[MQTT_HEALTH] Re-login error: ${e?.message || e}`);
