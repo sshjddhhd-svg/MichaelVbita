@@ -41,13 +41,11 @@ global.isAdmin          = isAdmin;
 // ─── Stop Current Listener ────────────────────────────────────────────────────
 function stopListening() {
   stopPoller();
-  // @dongdev v4: stop via api.stopListening()
   try {
     if (global.api && typeof global.api.stopListening === "function") {
       global.api.stopListening(() => {});
     }
   } catch (_) {}
-  // Legacy: call the stop function returned by api.listen()
   if (global._currentListener && typeof global._currentListener === "function") {
     try { global._currentListener(); } catch (_) {}
     global._currentListener = null;
@@ -56,7 +54,6 @@ function stopListening() {
     clearTimeout(global._listenTimer);
     global._listenTimer = null;
   }
-  // Stop MQTT client if active
   try {
     if (global.api?.ctx?.mqttClient) {
       global.api.ctx.mqttClient.end(true);
@@ -66,7 +63,7 @@ function stopListening() {
 
 // ─── HTTP Long-Poll Listener (with custom-poller fallback) ───────────────────
 function startPolling(api, commands, attempt = 1) {
-  const MAX = 3; // 3 attempts then switch to custom poller
+  const MAX = 3;
   const io  = getIO();
 
   log.warn(`HTTP long-poll (محاولة ${attempt}/${MAX})…`);
@@ -88,7 +85,6 @@ function startPolling(api, commands, attempt = 1) {
         log.info(`إعادة محاولة Long-Poll بعد ${delay / 1000}s…`);
         setTimeout(() => startPolling(api, commands, attempt + 1), delay);
       } else {
-        // Switch to custom poller (no GraphQL dependency)
         log.warn("⚡ التحويل إلى Custom Poller (بدون GraphQL batch)…");
         startPoller(api, handlerEvents, global.config?.pollIntervalMs || 5000);
       }
@@ -113,7 +109,7 @@ function startPolling(api, commands, attempt = 1) {
   global._currentListener = stop;
 }
 
-// ─── MQTT Listener (يُستخدم فقط عند وجود m_sess) ────────────────────────────
+// ─── MQTT Listener ────────────────────────────────────────────────────────────
 function startMqtt(api, commands, attempt = 1) {
   const MAX   = 4;
   const delay = Math.min(attempt * 8000, 40000);
@@ -124,7 +120,6 @@ function startMqtt(api, commands, attempt = 1) {
   let mqttStarted = false;
   let errored     = false;
 
-  // Timeout: إذا لم يتصل MQTT خلال 20 ثانية → HTTP polling
   const timer = setTimeout(() => {
     if (!mqttStarted) {
       log.warn("MQTT timeout — تحويل إلى Long-Poll");
@@ -206,7 +201,7 @@ async function loadCookies() {
   return cookies;
 }
 
-// ─── SINGLE-LOGIN LOCK (منع تسجيل الدخول المزدوج) ───────────────────────────
+// ─── SINGLE-LOGIN LOCK ────────────────────────────────────────────────────────
 let _loginLock = false;
 
 // ─── Main Bot Startup ─────────────────────────────────────────────────────────
@@ -220,7 +215,6 @@ async function startBot() {
   const io = getIO();
   stopListening();
 
-  // Stop protection systems
   try { require("./protection/stealth").stop(); } catch (_) {}
   try { require("./protection/keepAlive").stop(); } catch (_) {}
   try { require("./protection/mqttHealthCheck").stopHealthCheck(); } catch (_) {}
@@ -243,7 +237,6 @@ async function startBot() {
     return;
   }
 
-  // Check if m_sess is present → affects listener choice
   const hasMsess = cookies.some(c => c.key === "m_sess");
   if (!hasMsess) log.info(chalk.yellow("m_sess غير موجود — سيستخدم HTTP Long-Poll (لا MQTT)"));
 
@@ -285,13 +278,12 @@ async function startBot() {
         return;
       }
 
-      // Save refreshed appState back to account.txt — suppress our own watch event
       try {
         const fresh = dedup(api.getAppState() || []);
         if (fresh.length) {
-          global._selfWrite = true; // suppress file watcher
+          global._selfWrite = true;
           fs.writeFileSync(ACCOUNT_PATH, JSON.stringify(fresh, null, 2), "utf8");
-          setTimeout(() => { global._selfWrite = false; }, 6000); // clear after 6s
+          setTimeout(() => { global._selfWrite = false; }, 6000);
           log.info(`AppState محدَّث: ${chalk.cyan(fresh.length)} كوكي`);
         }
       } catch (_) {}
@@ -317,32 +309,25 @@ async function startBot() {
       try { require("./protection/mqttHealthCheck").startHealthCheck(); } catch (_) {}
       try { require("./protection/Uprotection"); } catch (_) {}
 
-      // Start protection — human-simulation systems
+      // Start protection — 10 human-simulation systems (مطابق لـ V1)
       try { require("./protection/humanReadReceipt").start(api); }   catch (_) {}
-      // naturalPresence مُعطَّل: يتعارض مع stealth.presenceLoop (كلاهما يستدعي api.setOptions)
-      // → ينتج نمط online/offline مجنون يكشفه فيسبوك فوراً
+      try { require("./protection/naturalPresence").start(api); }     catch (_) {}
+      try { require("./protection/scrollSimulator").start(api); }     catch (_) {}
       try { require("./protection/antiDetection").start(); }          catch (_) {}
       try { require("./protection/sessionRefresher").start(api); }    catch (_) {}
       try { require("./protection/reactionDelay").start(api); }       catch (_) {}
-      // connectionJitter مُعطَّل: كان يُغلّف getUserInfo → تأخير متراكم عند حل الأسماء لكل رسالة
-      // + طبقة إضافية على sendMessage فوق throttle + humanTyping = تراكم timeout
+      try { require("./protection/connectionJitter").start(api); }    catch (_) {}
       try { require("./protection/duplicateGuard").start(api); }      catch (_) {}
       try { require("./protection/typingVariator").start(api); }      catch (_) {}
       try { require("./protection/behaviorScheduler").start(); }      catch (_) {}
-      // scrollSimulator مُعطَّل: طلبات HTTP لفيسبوك تُسرّع كشف الجلسة وطردها
-      log.ok("🛡️ جميع أنظمة الحماية نشطة");
+      log.ok("🛡️ جميع أنظمة الحماية (16 نظام) نشطة");
 
-      // Start auto-backup
       try { require("./utils/autoBackup").start(); } catch (_) {}
 
-      // Setup cron jobs
       setupCronJobs(api);
 
-      // Release login lock BEFORE starting listener
       _loginLock = false;
 
-      // Wait 1.5s then start listener
-      // m_sess → try MQTT first | no m_sess → direct Long-Poll
       await new Promise(r => setTimeout(r, 1500));
       if (hasMsess) {
         startMqtt(api, commands, 1);
@@ -361,10 +346,9 @@ global.reLoginBot = async function () {
   log.warn("🔄 Hot-Swap: إعادة تسجيل الدخول…");
   await startBot();
 };
-// alias للتوافق مع mqttHealthCheck القديم
 global._reLoginBot = global.reLoginBot;
 
-// ─── Soft Restart (listener فقط — بدون re-login) ──────────────────────────────
+// ─── Soft Restart (listener فقط) ──────────────────────────────────────────────
 global.restartListener = async function () {
   const api = global.api;
   if (!api) { log.warn("restartListener: لا يوجد api — سيتم re-login"); return global.reLoginBot(); }
@@ -384,11 +368,9 @@ global.restartListener = async function () {
 // ─── Crash Recovery ────────────────────────────────────────────────────────────
 process.on("uncaughtException", (err) => {
   log.error(`[CRASH] uncaughtException: ${err?.message || err}`);
-  // لا نوقف البوت — فقط نسجّل الخطأ
 });
 process.on("unhandledRejection", (reason) => {
   log.error(`[CRASH] unhandledRejection: ${reason?.message || reason}`);
-  // لا نوقف البوت
 });
 
 // ─── Cron Jobs ────────────────────────────────────────────────────────────────
@@ -423,7 +405,6 @@ async function main() {
   await initDB();
   log.ok("قاعدة البيانات جاهزة");
 
-  // Init runtime globals for new systems
   if (!global._lockedThreads) global._lockedThreads = new Set();
   if (global._globalLock === undefined) global._globalLock = false;
   if (!global._broadcasts) global._broadcasts = new Map();
@@ -443,7 +424,7 @@ async function main() {
     groupEvents:     { welcomeMessage: "", leaveMessage: "" },
     backupIntervalMinutes: 60,
     cronJobs: [],
-    commandRoles: {}, // أدوار الأوامر: "admin" (افتراضي) أو "member"
+    commandRoles: {},
     userAgent: "Mozilla/5.0 (Linux; Android 12; M2102J20SG) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.0.0 Mobile Safari/537.36",
   };
 
@@ -478,24 +459,20 @@ async function main() {
   let _watchTimer  = null;
 
   fs.watch(ACCOUNT_PATH, () => {
-    // Debounce: تجاهل الأحداث المتكررة خلال 5 ثوانٍ
     if (_watchTimer) return;
     _watchTimer = setTimeout(async () => {
       _watchTimer = null;
 
-      // تجاهل إذا كانت الكتابة من البوت نفسه (AppState refresh)
       if (global._selfWrite) {
         log.info("تجاهل تغيير account.txt (كتابة داخلية)");
         return;
       }
 
-      // تجاهل إذا كانت الكتابة من لوحة التحكم (hot-swap يُطلَق من الـ API مباشرةً)
       if (global._dashCookieWrite) {
         log.info("تجاهل تغيير account.txt (كتابة من الداشبورد — hot-swap جارٍ)");
         return;
       }
 
-      // تجاهل إذا كان تسجيل دخول جارٍ
       if (_loginLock) {
         log.info("تجاهل تغيير account.txt (تسجيل دخول جارٍ)");
         return;
@@ -515,7 +492,6 @@ async function main() {
     }, 5000);
   });
 
-  // Start bot
   await startBot();
 }
 
