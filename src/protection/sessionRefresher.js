@@ -1,10 +1,9 @@
 "use strict";
 /**
- * Session Refresher — WHITE Engine (fixed v2)
+ * Session Refresher — WHITE Engine (V1 original)
  * ===================================
- * 1. يحفظ AppState المحدَّث دورياً (محلياً) لمنع فقدان الكوكيز عند الكراش
- * 2. يُنفّذ "session touch" عبر getUserInfo لتجديد الجلسة على سيرفرات فيسبوك
- *    دون أي طلب HTTP مستقل — يسير عبر قناة FCA الموجودة
+ * يحفظ AppState المحدَّث دورياً لمنع انتهاء صلاحية الكوكيز
+ * لا يُرسل أي طلبات HTTP إضافية لتجنب الكشف عن البوت
  */
 
 const fs   = require("fs-extra");
@@ -23,13 +22,11 @@ function log(level, msg) {
 
 const ACCOUNT_PATH = path.join(__dirname, "../../account.txt");
 
-let _running   = false;
-let _api       = null;
+let _running = false;
+let _api = null;
 let _saveCount = 0;
-let _lastSave  = 0;
-let _touchCount= 0;
-let _lastTouch = 0;
-const _timers  = [];
+let _lastSave = 0;
+const _timers = [];
 
 function addTimer(fn, ms) {
   const id = setTimeout(() => { const i = _timers.indexOf(id); if (i !== -1) _timers.splice(i, 1); fn(); }, ms);
@@ -37,7 +34,6 @@ function addTimer(fn, ms) {
 }
 function clearAll() { _timers.forEach(id => clearTimeout(id)); _timers.length = 0; }
 
-// ─── حفظ AppState محلياً ───────────────────────────────────────────────────────
 async function doSave() {
   if (!_running || !_api) return;
 
@@ -56,46 +52,9 @@ async function doSave() {
   } catch (_) {}
 
   const cfg = global.config?.sessionRefresher || {};
-  const minMin = cfg.minIntervalMinutes ?? 20;
-  const maxMin = cfg.maxIntervalMinutes ?? 35;
+  const minMin = cfg.minIntervalMinutes ?? 25;
+  const maxMin = cfg.maxIntervalMinutes ?? 55;
   addTimer(doSave, randMs(minMin, maxMin));
-}
-
-// ─── Session Touch — تجديد الجلسة على سيرفرات فيسبوك ─────────────────────────
-async function doTouch() {
-  if (!_running || !_api) return;
-
-  try {
-    const uid = String(_api.getCurrentUserID() || "");
-    if (uid) {
-      await new Promise((resolve) => {
-        try {
-          // getUserInfo يمر عبر قناة FCA الموجودة → يُجدّد token على فيسبوك
-          _api.getUserInfo([uid], (err, data) => {
-            if (!err && data) {
-              _touchCount++;
-              _lastTouch = Date.now();
-              // حدّث الطابع الزمني لـ health-check
-              global._lastActivity     = Date.now();
-              global._lastMqttActivity = Date.now();
-              try { require("./mqttHealthCheck").onMqttActivity(); } catch (_) {}
-              log("ok", `Session touch OK ✔ (UID: ${uid}) ×${_touchCount}`);
-            } else if (err) {
-              const msg = String(err.error || err.message || err);
-              log("warn", `Session touch failed: ${msg.slice(0, 80)}`);
-            }
-            resolve();
-          });
-        } catch (_) { resolve(); }
-      });
-    }
-  } catch (_) {}
-
-  // Touch كل 15-25 دقيقة بشكل مستقل عن الحفظ
-  const cfg = global.config?.sessionRefresher || {};
-  const minMin = cfg.touchIntervalMinutes ?? 15;
-  const maxMin = cfg.touchMaxIntervalMinutes ?? 25;
-  addTimer(doTouch, randMs(minMin, maxMin));
 }
 
 function start(api) {
@@ -103,29 +62,16 @@ function start(api) {
   if (cfg.enable === false) return;
   if (_running) return;
   _running = true;
-  _api     = api;
-  log("info", "🚀 Session Refresher started (save + touch mode)");
-
-  // حفظ محلي: أول مرة بعد 15-25 دقيقة
-  addTimer(doSave, randMs(15, 25));
-  // session touch: أول مرة بعد 8-12 دقيقة
-  addTimer(doTouch, randMs(8, 12));
+  _api = api;
+  log("info", "🚀 Session Refresher started (cookie-save mode — no HTTP)");
+  // أول حفظ بعد 15-30 دقيقة من الانطلاق
+  addTimer(doSave, randMs(15, 30));
 }
 
-function stop() {
-  _running = false;
-  clearAll();
-  log("warn", "🛑 Session Refresher stopped");
-}
+function stop() { _running = false; clearAll(); log("warn", "🛑 Session Refresher stopped"); }
 
 module.exports = {
   start, stop,
-  getStatus: () => ({
-    running:    _running,
-    saveCount:  _saveCount,
-    lastSave:   _lastSave,
-    touchCount: _touchCount,
-    lastTouch:  _lastTouch,
-  }),
+  getStatus: () => ({ running: _running, saveCount: _saveCount, lastSave: _lastSave }),
   isRunning: () => _running,
 };
