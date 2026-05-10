@@ -85,6 +85,10 @@ async function pollOnce(api, eventHandler) {
       log.ok(`Custom Poller استُعيدَ ✔ — ${threads.length} محادثة`);
     }
     _failCount = 0;
+    // أبلغ health-check بأن الـ poller نشط
+    global._lastActivity     = Date.now();
+    global._lastMqttActivity = Date.now();
+    try { require("../protection/mqttHealthCheck").onMqttActivity(); } catch (_) {}
   } catch (e) {
     _failCount++;
     const msg = String(e.error || e.message || e);

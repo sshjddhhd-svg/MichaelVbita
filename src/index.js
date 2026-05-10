@@ -105,6 +105,8 @@ function startPolling(api, commands, attempt = 1) {
     }
 
     global._lastActivity = Date.now();
+    global._lastMqttActivity = Date.now();
+    try { require("./protection/mqttHealthCheck").onMqttActivity(); } catch (_) {}
     if (event) handlerEvents(api, event, global.commands).catch(() => {});
   });
 
@@ -163,6 +165,8 @@ function startMqtt(api, commands, attempt = 1) {
     }
 
     global._lastActivity = Date.now();
+    global._lastMqttActivity = Date.now();
+    try { require("./protection/mqttHealthCheck").onMqttActivity(); } catch (_) {}
     if (event) handlerEvents(api, event, global.commands).catch(() => {});
   });
 
