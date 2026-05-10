@@ -72,9 +72,6 @@ let _api    = null;
 let _startTime = Date.now();
 const _timers = [];
 
-// ─── آخر حالة حضور أُرسلت لمنع الاستدعاءات المكررة ───────────────────────
-let _lastPresenceState = null;
-
 function addTimer(fn, ms) {
   const id = setTimeout(() => { const i = _timers.indexOf(id); if (i !== -1) _timers.splice(i, 1); fn(); }, ms);
   _timers.push(id);
@@ -92,50 +89,29 @@ async function presenceLoop() {
   const api = _api;
   try {
     if (isSleepHour()) {
-      if (_lastPresenceState !== "offline") {
-        try { api.setOptions({ online: false }); } catch (_) {}
-        _lastPresenceState = "offline";
-        log("info", "🌙 Sleep — presence: offline");
-      }
-      // فترة أطول في وقت النوم: 30-60 دقيقة (تقليل استدعاءات api.setOptions)
-      return addTimer(presenceLoop, randMs(30, 60));
+      try { api.setOptions({ online: false }); } catch (_) {}
+      log("info", "🌙 Sleep — presence: offline");
+      return addTimer(presenceLoop, randMs(25, 55));
     }
     if (isWarmup()) {
-      if (_lastPresenceState !== "offline") {
-        try { api.setOptions({ online: false }); } catch (_) {}
-        _lastPresenceState = "offline";
-      }
-      return addTimer(presenceLoop, randMs(5, 10));
+      try { api.setOptions({ online: false }); } catch (_) {}
+      return addTimer(presenceLoop, randMs(3, 8));
     }
     const roll = Math.random();
-    let newState;
-    let nextInterval;
-
     if (roll < 0.50) {
-      newState = "online";
-      nextInterval = randMs(12, 25); // 12-25 دقيقة (زيادة من 6-18)
+      try { api.setOptions({ online: true }); } catch (_) {}
+      log("info", "🟢 Presence → online");
+      addTimer(presenceLoop, randMs(6, 18));
     } else if (roll < 0.80) {
-      newState = "idle";
-      nextInterval = randMs(10, 20); // 10-20 دقيقة (زيادة من 5-15)
+      try { api.setOptions({ online: false }); } catch (_) {}
+      log("info", "💤 Presence → idle");
+      addTimer(presenceLoop, randMs(5, 15));
     } else {
-      newState = "offline_break";
-      nextInterval = randMs(15, 30); // 15-30 دقيقة (زيادة من 10-25)
+      try { api.setOptions({ online: false }); } catch (_) {}
+      log("info", "📴 Presence → offline break");
+      addTimer(presenceLoop, randMs(10, 25));
     }
-
-    // لا نستدعي api.setOptions إذا الحالة لم تتغير → تقليل الضوضاء
-    if (newState !== _lastPresenceState) {
-      if (newState === "online") {
-        try { api.setOptions({ online: true }); } catch (_) {}
-        log("info", "🟢 Presence → online");
-      } else {
-        try { api.setOptions({ online: false }); } catch (_) {}
-        log("info", newState === "idle" ? "💤 Presence → idle" : "📴 Presence → offline break");
-      }
-      _lastPresenceState = newState;
-    }
-
-    addTimer(presenceLoop, nextInterval);
-  } catch (_) { addTimer(presenceLoop, randMs(15, 25)); }
+  } catch (_) { addTimer(presenceLoop, randMs(10, 20)); }
 }
 
 module.exports.start = function(api) {
@@ -145,18 +121,14 @@ module.exports.start = function(api) {
   running    = true;
   _api       = api;
   _startTime = Date.now();
-  _lastPresenceState = null;
   log("info", `🕵️ Stealth engine started (sleep: ${cfg.sleepHourStart ?? 1}:00–${cfg.sleepHourEnd ?? 8}:00)`);
-  // presenceLoop فقط — آمن 100%، فترات أطول لتقليل api.setOptions calls
-  addTimer(presenceLoop, randMs(3, 8)); // أول تغيير بعد 3-8 دقائق
+  // presenceLoop فقط — آمن 100% (يستخدم api.setOptions بدون HTTP خارجي)
+  addTimer(presenceLoop, randMs(0, 2));
+  // browseLoop مُعطَّل — الطلبات HTTP الخارجية تُسبب كشف البوت وطرد الجلسة
+  // uaRotationLoop مُعطَّل — لا نُدوّر UA
 };
 
-module.exports.stop = function() {
-  running = false;
-  _lastPresenceState = null;
-  clearAll();
-  log("info", "🛑 Stealth stopped.");
-};
+module.exports.stop = function() { running = false; clearAll(); log("info", "🛑 Stealth stopped."); };
 module.exports.isRunning   = () => running;
 module.exports.getCurrentUA = getUA;
 module.exports.jitter = (ms) => Math.round(ms * (0.85 + Math.random() * 0.30));
