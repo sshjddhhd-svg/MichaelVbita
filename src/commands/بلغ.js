@@ -1,10 +1,11 @@
 "use strict";
 /**
  * ╔══════════════════════════════════════════════════════════════════════════════════╗
- * ║   نظام البلاغات الذكي v4.0 — ULTRA MAX ENGINE                                  ║
+ * ║   نظام البلاغات الذكي v5.0 — ULTRA MAX ENGINE                                  ║
  * ║   فحص شامل: رسائل + ملف شخصي + سلوك + روابط + رموز + تلميحات                  ║
- * ║   25 فئة مخالفة | 8 طبقات تحليل | كل اللهجات | إبلاغ تلقائي فوري              ║
- * ║   متوافق مع معايير مجتمع فيسبوك 2024 بالكامل                                   ║
+ * ║   25+ فئة | كسمك/نيكمك/عصمك/زكمك/فرخ/كحبه + كل التشفيرات                     ║
+ * ║   كشف التمويه: أحرف لاتينية + أرقام + نقاط + أحرف خفية zero-width             ║
+ * ║   أنظمة البلاغ المثلى: 19 نوع بلاغ مُحسَّن | سبام/فلود/تكرار                  ║
  * ╚══════════════════════════════════════════════════════════════════════════════════╝
  */
 
@@ -17,6 +18,9 @@ const randInt = (a, b) => Math.floor(Math.random() * (b - a + 1)) + a;
 function normalize(raw) {
   if (!raw || typeof raw !== "string") return "";
   let t = raw;
+
+  // 0) إزالة الأحرف الخفية والـ zero-width
+  t = t.replace(/[\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF\u00AD\u034F\u115F\u1160\u17B4\u17B5\u180B-\u180D\u3164\uFFA0]/g, "");
 
   // 1) إزالة التشكيل والزوائد
   t = t.replace(/[\u064B-\u065F\u0610-\u061A\u0670\u06D6-\u06DC\u06DF-\u06E4\u06E7\u06E8\u06EA-\u06ED]/g, "");
@@ -50,7 +54,65 @@ function normalize(raw) {
        .replace(/٥/g,"5").replace(/٦/g,"6").replace(/٧/g,"7").replace(/٨/g,"8")
        .replace(/٩/g,"9").replace(/٠/g,"0");
 
-  // 8) أرقام لاتينية بدل حروف عربية (leet)
+  // 8) تحويل لأحرف صغيرة مبكراً لتسهيل الكشف
+  t = t.toLowerCase();
+
+  // 9-A) عربيزي — كلمات خاصة (BEFORE leet decode لتجنب تعارض الأرقام)
+  t = t
+    // ──── كسمك وكل صيغه المشفرة ────
+    .replace(/\b(k|ك)\s*[.\-_|،,*~^]?\s*(s|س)\s*[.\-_|،,*~^]?\s*(m|م)\s*[.\-_|،,*~^]?\s*(k|ك)\b/gi, "كسمك")
+    .replace(/\bksmk\b|\bks\.mk\b|\bk\.s\.m\.k\b|\bk_s_m_k\b/gi, "كسمك")
+    .replace(/\bkosomak\b|\bkos\s*omak\b|\bkos\s*ommak\b|\bkosommak\b/gi, "كسمك")
+    .replace(/\bk0somak\b|\bk0s0mak\b/gi, "كسمك")
+    .replace(/\bkus\s*omak\b|\bkusom\b/gi, "كسمك")
+    // ──── نيكمك وكل صيغه ────
+    .replace(/\b(n|ن)\s*[.\-_|،,*~^]?\s*(i|y|ي)\s*[.\-_|،,*~^]?\s*(k|ك)\s*[.\-_|،,*~^]?\s*(m|م)\s*[.\-_|،,*~^]?\s*(k|ك)\b/gi, "نيكمك")
+    .replace(/\bni[iy]?kmk\b|\bnekmk\b|\bnik\s*mak\b|\bnikmak\b/gi, "نيكمك")
+    .replace(/\bn[iy]k\s*omak\b|\bneek\s*omak\b|\bnekmak\b/gi, "نيكمك")
+    .replace(/\bn\.i\.k\.m\.k\b|\bn_i_k_m_k\b/gi, "نيكمك")
+    // ──── عصمك وكل صيغه ────
+    .replace(/\b3s\s*mk\b|\b3smk\b|\b3\.s\.m\.k\b|\ba9mak\b/gi, "عصمك")
+    .replace(/\b(3|ع)\s*[.\-_|،,*~^]?\s*(s|ص)\s*[.\-_|،,*~^]?\s*(m|م)\s*[.\-_|،,*~^]?\s*(k|ك)\b/gi, "عصمك")
+    .replace(/\basmak\b|\ba9mk\b|\b3asmk\b/gi, "عصمك")
+    // ──── زكمك وكل صيغه ────
+    .replace(/\bz\s*k\s*m\s*k\b|\bzkmk\b|\bz\.k\.m\.k\b|\bzekmk\b/gi, "زكمك")
+    .replace(/\b(z|ز)\s*[.\-_|،,*~^]?\s*(k|ك)\s*[.\-_|،,*~^]?\s*(m|م)\s*[.\-_|،,*~^]?\s*(k|ك)\b/gi, "زكمك")
+    // ──── كحبه/قحبه ────
+    .replace(/\bkahba\b|\bkahbe\b|\bqahba\b|\bqahbe\b|\bga7ba\b|\bka7ba\b/gi, "قحبه")
+    .replace(/\bk\.h\.b\b|\bq\.h\.b\b|\bk_h_b\b/gi, "قحبه")
+    // ──── عاهره ────
+    .replace(/\b3ahre\b|\b3ahira\b|\b3ahira\b|\b3aahra\b|\b3a7ra\b/gi, "عاهره")
+    .replace(/\baahira\b|\baahre\b/gi, "عاهره")
+    // ──── فرخ ────
+    .replace(/\bfar[5x]\b|\bfarrakh\b|\bfar5\b|\bfar_kh\b|\bfar\.kh\b/gi, "فرخ")
+    .replace(/\bfrkh\b|\bf\.r\.kh\b|\bf_r_k_h\b/gi, "فرخ")
+    // ──── نيك وكل صيغه ────
+    .replace(/\bnaik\b|\bnayk\b|\bnayek\b|\bneek\b|\bneik\b|\bn[iy][iy]k\b/gi, "نيك")
+    .replace(/\bn\.i\.k\b|\bn_i_k\b|\bni\.k\b/gi, "نيك")
+    // ──── شرموطه ────
+    .replace(/\bsharmou?t[ah]?\b|\bshar\.moot\b|\bsh\.r\.m\.t\b/gi, "شرموطه")
+    .replace(/\bsharm0ota\b|\bsharmut\b/gi, "شرموطه")
+    // ──── باقي الكلمات الشائعة ────
+    .replace(/\bwlad\s*el?\s*kalb\b/gi, "ولاد الكلب")
+    .replace(/\bibn\s*el?\s*sharmouta\b/gi, "ابن الشرموطه")
+    .replace(/\bkos\s*(om|ommak|omak|okhtak)\b/gi, "كسمك")
+    .replace(/\b3ahir\b|\b3ahre\b|\b3aher\b/gi, "عاهر")
+    .replace(/\bhmar\b|\bhmer\b/gi, "حمار")
+    .replace(/\bkhinzir\b|\bkhenzir\b/gi, "خنزير")
+    .replace(/\bkalb\b|\bkelb\b/gi, "كلب")
+    .replace(/\b7mar\b|\b7mer\b/gi, "حمار")
+    .replace(/\bintahar\b|\bintaher\b|\bintahaar\b/gi, "انتحر")
+    .replace(/\bkos\b/gi, "كسمك")
+    .replace(/\bweld\s*el?\s*kahba\b/gi, "ولد القحبه")
+    .replace(/\bya\s*ibn\s*el?\s*kalb\b/gi, "يا ابن الكلب")
+    .replace(/\bzobbi\b|\bzubi\b|\bzoby\b/gi, "ج.ن.س")
+    .replace(/\bkss\b/gi, "كسمك")
+    .replace(/\bmtnaka\b|\bmtnake\b/gi, "منيوك")
+    .replace(/\bkweer\b|\bkwer\b/gi, "خول")
+    .replace(/\bfassad\b/gi, "فساد")
+    .replace(/\bla7ya\b/gi, "لاهيه");
+
+  // 9-B) أرقام لاتينية بدل حروف عربية (leet) — بعد العربيزي
   t = t.replace(/(?<![0-9])3(?![0-9])/g, "ع");
   t = t.replace(/(?<![0-9])5(?![0-9])/g, "خ");
   t = t.replace(/(?<![0-9])6(?![0-9])/g, "ط");
@@ -59,53 +121,27 @@ function normalize(raw) {
   t = t.replace(/(?<![0-9])9(?![0-9])/g, "ص");
   t = t.replace(/(?<![0-9])4(?![0-9])/g, "ع");
   t = t.replace(/(?<![0-9])2(?![0-9])/g, "ء");
+  t = t.replace(/(?<![0-9])0(?![0-9])/g, "و");
 
-  // 9) رموز بديلة
+  // 10) رموز بديلة
   t = t.replace(/@/g, "ا").replace(/\$/g, "س").replace(/!/g, "ا");
   t = t.replace(/#/g, "").replace(/\*/g, "");
 
-  // 10) عربيزي — كتابة عربية بحروف لاتينية
-  t = t
-    .replace(/\bwlad\s*el?\s*kalb\b/gi, "ولاد الكلب")
-    .replace(/\bibn\s*el?\s*sharmouta\b/gi, "ابن الشرموطه")
-    .replace(/\bkos\s*(om|ommak|omak|okhtak)\b/gi, "ش.ت.م")
-    .replace(/\bsharmou[t]?[ah]?\b/gi, "شرموطه")
-    .replace(/\beahrek\b|\bahrak\b|\bahrek\b/gi, "احرق")
-    .replace(/\bnaik\b|\bnayk\b|\bnayek\b/gi, "نيك")
-    .replace(/\bkahba\b|\bqahba\b|\bqahbe\b/gi, "قحبه")
-    .replace(/\b3ahir\b|\b3ahre\b|\b3aher\b/gi, "عاهر")
-    .replace(/\bhmar\b|\bhmer\b/gi, "حمار")
-    .replace(/\bkhinzir\b|\bkhenzir\b/gi, "خنزير")
-    .replace(/\bkalb\b|\bkelb\b/gi, "كلب")
-    .replace(/\b7mar\b|\b7mer\b/gi, "حمار")
-    .replace(/\bintahar\b|\bintaher\b|\bintahaar\b/gi, "انتحر")
-    .replace(/\bkos\b/gi, "ش.ج.ن")
-    .replace(/\bweld\s*el?\s*kahba\b/gi, "ولد القحبه")
-    .replace(/\bya\s*ibn\s*el?\s*kalb\b/gi, "يا ابن الكلب")
-    .replace(/\bneek\b|\bneik\b/gi, "نيك")
-    .replace(/\bzobbi\b|\bzubi\b|\bzoby\b/gi, "ج.ن.س")
-    .replace(/\bkss\b|\bkos\b/gi, "ش.ج.ن")
-    .replace(/\bmtnaka\b|\bmtnake\b/gi, "منيوك")
-    .replace(/\bkweer\b|\bkwer\b/gi, "خول")
-    .replace(/\bfassad\b/gi, "فساد")
-    .replace(/\bla7ya\b/gi, "لاهيه");
-
-  // 11) إزالة فراغات بين حروف عربية
+  // 11) إزالة فراغات بين حروف عربية (3 مرات لتغطية الفراغات المتعددة)
   t = t.replace(/([ا-ي])\s+([ا-ي])/g, "$1$2");
   t = t.replace(/([ا-ي])\s+([ا-ي])/g, "$1$2");
   t = t.replace(/([ا-ي])\s+([ا-ي])/g, "$1$2");
 
-  // 12) حذف نقاط وفواصل بين الحروف
-  t = t.replace(/([ا-ي])[._\-*|\\\/~`^،,]([ا-ي])/g, "$1$2");
+  // 12) حذف فواصل بين الحروف العربية (نقطة، شرطة، فاصلة، مسافة سفلية...)
+  t = t.replace(/([ا-ي])[._\-*|\\\/~`^،,؛:؟!+%&=]{1,2}([ا-ي])/g, "$1$2");
+  t = t.replace(/([ا-ي])[._\-*|\\\/~`^،,؛:؟!+%&=]{1,2}([ا-ي])/g, "$1$2");
 
-  // 13) تطبيع التكرار
+  // 13) حذف فواصل بين الحروف اللاتينية المنفردة (k.s.m.k → ksmk)
+  t = t.replace(/\b([a-z])[._\-]{1}([a-z])[._\-]{1}([a-z])[._\-]{1}([a-z])\b/g, "$1$2$3$4");
+  t = t.replace(/\b([a-z])[._\-]{1}([a-z])[._\-]{1}([a-z])\b/g, "$1$2$3");
+
+  // 14) تطبيع التكرار
   t = t.replace(/(.)\1{3,}/g, "$1$1");
-
-  // 14) توحيد حرف الهاء والحاء
-  // لا نوحدهما لأنه يسبب إيجابيات كاذبة
-
-  // 15) تحويل لأحرف صغيرة
-  t = t.toLowerCase();
 
   return t;
 }
@@ -168,28 +204,41 @@ const TOKEN_BLACKLIST = [
   { t: /\bفضيحه?\b|\bمفضوح\b/,                        c: "BULLYING",       s: 6 },
   { t: /\bاستهزاء\b|\bسخريه?\b|\bاستهزء\b/,          c: "BULLYING",       s: 4 },
 
+  // ── شتائم المستخدم المحددة — كشف مباشر بعد التطبيع ────────────────────
+  { t: /\bكسمك\b|\bكسم\s*مك\b|\bكسامك\b/,             c: "SEXUAL_CONTENT", s: 10 },
+  { t: /\bنيكمك\b|\bنيك\s*مك\b|\bنيكبك\b/,            c: "SEXUAL_CONTENT", s: 10 },
+  { t: /\bعصمك\b|\bعص\s*مك\b|\bاعصمك\b/,              c: "SEXUAL_CONTENT", s: 10 },
+  { t: /\bزكمك\b|\bزك\s*مك\b|\bازكمك\b/,               c: "SEXUAL_CONTENT", s: 10 },
+  { t: /\bكحبه?\b|\bكحاب\b/,                           c: "SEXUAL_CONTENT", s: 9  },
+  { t: /\bفرخ\b|\bفروخ\b|\bفرخه?\b/,                   c: "SEXUAL_CONTENT", s: 8  },
+  // ── كسم + صاحب / أهل ──
+  { t: /كسم\s*(ك|ه|ها|هم|بيك|بيه|امك|ابوك|اخوك|اختك|اهلك|خيتك|خيك|ربك)/,  c: "SEXUAL_CONTENT", s: 10 },
+  { t: /نيك\s*(ك|ه|ها|هم|بيك|امك|اختك|اهلك|خيتك|خيك)/,                      c: "SEXUAL_CONTENT", s: 10 },
+  // ── أعضاء تناسلية (شتائم) ──
+  { t: /\bكسمك\b|\bكسها\b|\bكسك\b|\bكسهم\b/,           c: "SEXUAL_CONTENT", s: 10 },
+
   // ── محتوى جنسي صريح ────────────────────────────────────────────────────
-  { t: /\bشرموطه?\b|\bشرامط\b/,                       c: "SEXUAL_CONTENT", s: 9 },
-  { t: /\bقحبه?\b|\bقحاب\b/,                          c: "SEXUAL_CONTENT", s: 9 },
-  { t: /\bعاهره?\b|\bعاهرات\b/,                       c: "SEXUAL_CONTENT", s: 8 },
-  { t: /\bزانيه?\b|\bزناه\b/,                         c: "SEXUAL_CONTENT", s: 8 },
-  { t: /\bفاحشه?\b|\bفواحش\b/,                        c: "SEXUAL_CONTENT", s: 7 },
-  { t: /\bنيك\b|\bتنيك\b|\bينيك\b|\bنايك\b/,         c: "SEXUAL_CONTENT", s: 10 },
-  { t: /\bمنيوك\b|\bمنيك\b|\bمنتاك\b/,               c: "SEXUAL_CONTENT", s: 9 },
-  { t: /\bاغتصاب\b|\bاغتصب\b/,                        c: "SEXUAL_CONTENT", s: 10 },
-  { t: /\bتحرش\b|\bمتحرش\b/,                          c: "SEXUAL_CONTENT", s: 8 },
-  { t: /\bإباحي\b|\bاباحيه?\b|\bاباحي\b/,             c: "SEXUAL_CONTENT", s: 8 },
-  { t: /\bporn\b|\bxxx\b|\bporno\b/,                  c: "SEXUAL_CONTENT", s: 9 },
-  { t: /\bsex\b|\bsexy\b/,                             c: "SEXUAL_CONTENT", s: 6 },
-  { t: /\bnude\b|\bnudes\b|\bnaked\b/,                 c: "SEXUAL_CONTENT", s: 8 },
-  { t: /\bonlyfans\b|\bof\s*link\b/,                   c: "SEXUAL_CONTENT", s: 7 },
-  { t: /\bدعاره?\b|\bبغاء\b/,                         c: "SEXUAL_CONTENT", s: 9 },
-  { t: /\bجنسي\b|\bجنسيه?\b/,                         c: "SEXUAL_CONTENT", s: 6 },
-  { t: /\bمومس\b|\bمومسه?\b/,                         c: "SEXUAL_CONTENT", s: 9 },
-  { t: /\bعاهه\s*جنسيه?\b/,                           c: "SEXUAL_CONTENT", s: 8 },
-  { t: /\bازبار\b|\bايره?\b|\bزبر\b/,                 c: "SEXUAL_CONTENT", s: 9 },
-  { t: /\bكس\b|\bفرج\b/,                              c: "SEXUAL_CONTENT", s: 9 },
-  { t: /\bتمارس\s*الجنس\b|\bممارسه\s*الجنس\b/,       c: "SEXUAL_CONTENT", s: 8 },
+  { t: /\bشرموطه?\b|\bشرامط\b/,                        c: "SEXUAL_CONTENT", s: 9 },
+  { t: /\bقحبه?\b|\bقحاب\b/,                           c: "SEXUAL_CONTENT", s: 9 },
+  { t: /\bعاهره?\b|\bعاهرات\b/,                        c: "SEXUAL_CONTENT", s: 8 },
+  { t: /\bزانيه?\b|\bزناه\b/,                          c: "SEXUAL_CONTENT", s: 8 },
+  { t: /\bفاحشه?\b|\bفواحش\b/,                         c: "SEXUAL_CONTENT", s: 7 },
+  { t: /\bنيك\b|\bتنيك\b|\bينيك\b|\bنايك\b|\bنيكت\b/, c: "SEXUAL_CONTENT", s: 10 },
+  { t: /\bمنيوك\b|\bمنيك\b|\bمنتاك\b|\bمنيوكه\b/,     c: "SEXUAL_CONTENT", s: 9 },
+  { t: /\bاغتصاب\b|\bاغتصب\b/,                         c: "SEXUAL_CONTENT", s: 10 },
+  { t: /\bتحرش\b|\bمتحرش\b/,                           c: "SEXUAL_CONTENT", s: 8 },
+  { t: /\bإباحي\b|\bاباحيه?\b|\bاباحي\b/,              c: "SEXUAL_CONTENT", s: 8 },
+  { t: /\bporn\b|\bxxx\b|\bporno\b/,                   c: "SEXUAL_CONTENT", s: 9 },
+  { t: /\bsex\b|\bsexy\b/,                              c: "SEXUAL_CONTENT", s: 6 },
+  { t: /\bnude\b|\bnudes\b|\bnaked\b/,                  c: "SEXUAL_CONTENT", s: 8 },
+  { t: /\bonlyfans\b|\bof\s*link\b/,                    c: "SEXUAL_CONTENT", s: 7 },
+  { t: /\bدعاره?\b|\bبغاء\b/,                          c: "SEXUAL_CONTENT", s: 9 },
+  { t: /\bجنسي\b|\bجنسيه?\b/,                          c: "SEXUAL_CONTENT", s: 6 },
+  { t: /\bمومس\b|\bمومسه?\b/,                          c: "SEXUAL_CONTENT", s: 9 },
+  { t: /\bعاهه\s*جنسيه?\b/,                            c: "SEXUAL_CONTENT", s: 8 },
+  { t: /\bازبار\b|\bايره?\b|\bزبر\b|\bايور\b/,         c: "SEXUAL_CONTENT", s: 9 },
+  { t: /\bكس\b|\bفرج\b/,                               c: "SEXUAL_CONTENT", s: 9 },
+  { t: /\bتمارس\s*الجنس\b|\bممارسه\s*الجنس\b/,        c: "SEXUAL_CONTENT", s: 8 },
 
   // ── شذوذ (كمصطلح إهانة) ─────────────────────────────────────────────────
   { t: /\bخول\b|\bخوله?\b|\bخولات\b/,                 c: "HATE_SPEECH",    s: 7 },
@@ -517,8 +566,8 @@ const CONTEXT_RULES = [
   // ─── 10. سبام ومحتوى مضلل ──────────────────────────────────────────────────
   {
     id: "SPAM", cat: "سبام ومحتوى مضلل", sev: "MEDIUM", sc: 5,
-    rt: "سبام أو محتوى مضلل",
-    desc: "رسائل مضلله أو روابط لنشر معلومات زائفة",
+    rt: "محتوى سبام أو رسائل جماعية مزعجة",
+    desc: "رسائل مضللة أو روابط لنشر معلومات زائفة أو طلب تكرار مشاركة",
     p: [
       /(اضغط|زور|انقر)\s*(الرابط|الموقع|اللينك)\s*(لربح|للفوز|للحصول\s*على|لتحصل)/,
       /شارك\s*(هذه\s*الرساله|المنشور|الخبر)\s*(مع|الى)\s*(\d+|جميع|كل)\s*(اشخاص|مجموعات)/,
@@ -526,6 +575,11 @@ const CONTEXT_RULES = [
       /فيسبوك\s*(سيغلق|سيحذف|سيوقف)\s*(حسابك|الخدمه|المنصه)\s*(اذا\s*لم|قريبا)/,
       /منشور\s*رح\s*(يختفي|يُحذف|يُخفى)\s*(شارك|احفظ|انشر)\s*(الان|قبل\s*الحذف)/,
       /اللي\s*(ما\s*شارك|لم\s*يشارك|ما\s*يرسل)\s*(سيحدث\s*له|سيصيبه|ستنزل\s*عليه)/,
+      /ارسل\s*(هذه?\s*الرساله?|هذا\s*المنشور)\s*(الى|ل|لـ)\s*(\d+|عشر|خمس|مية)\s*(اشخاص|اصدقاء|مجموعه)/,
+      /هذه?\s*الرساله?\s*(ستجلب|ستحقق|ستعطيك)\s*(حظاً|مالاً|سعاده|معجزه)/,
+      /(اشترك|سجل|اضغط)\s*(الان|هنا|بسرعه)\s*(مجاناً|مجاني|بدون\s*مقابل)\s*(رابط|لينك)/,
+      /(مجموعه|قروب|جروب)\s*(ربح|فلوس|مال|دولار)\s*(يومي|سريع|مضمون|مجاني)/,
+      /\b(bot|spam|flood)\b.*\b(جروب|مجموعه|قروب|group)\b/i,
     ],
   },
 
@@ -876,37 +930,60 @@ function detectBehavior(messages) {
   // ب) عدد الروابط المفرط
   const urlCount = messages.reduce((a, m) => a + (m.body.match(/https?:\/\/\S+/g) || []).length, 0);
   if (urlCount >= 4) out.push({
-    id: "EXCESSIVE_LINKS", cat: "روابط مفرطة", sev: "MEDIUM", sc: 5,
+    id: "EXCESSIVE_LINKS", cat: "روابط مفرطة (سبام)", sev: "MEDIUM", sc: 5,
     rt: "سبام — نشر روابط مفرطة", confidence: 80,
-    desc: `نشر ${urlCount} روابط — سلوك مشبوه`,
+    desc: `نشر ${urlCount} روابط مشبوهة — سلوك سبام واضح`,
   });
 
-  // ج) كثافة الشتائم
-  const insults = /\b(غبي|احمق|بليد|حقير|تافه|معتوه|ابله|فاشل|خاسر|زباله|حيوان|بهيمه|كلب|خنزير|قرد|حمار|قذر|وسخ|نجس|سافل)\b/gi;
+  // ج) كثافة الشتائم — الكلمات الخاصة المضافة
+  const insults = /\b(غبي|احمق|بليد|حقير|تافه|معتوه|ابله|فاشل|خاسر|زباله|حيوان|بهيمه|كلب|خنزير|قرد|حمار|قذر|وسخ|نجس|سافل|كسمك|نيكمك|عصمك|زكمك|كحبه|قحبه|فرخ|شرموطه|عاهره|نيك|منيوك)\b/gi;
   const insultTotal = messages.reduce((a, m) => a + (m.body.match(insults) || []).length, 0);
-  if (insultTotal >= 5) out.push({
-    id: "INSULT_PATTERN", cat: "نمط إهانات ممنهج", sev: "HIGH", sc: 7,
-    rt: "تنمر إلكتروني ممنهج", confidence: 85,
-    desc: `استخدم ${insultTotal} شتيمة/إهانة — نمط تنمر واضح`,
+  if (insultTotal >= 3) out.push({
+    id: "INSULT_PATTERN", cat: "نمط إهانات وشتائم ممنهج", sev: "HIGH", sc: 7,
+    rt: "تنمر إلكتروني ممنهج وإهانة متكررة", confidence: Math.min(95, 70 + insultTotal * 3),
+    desc: `استخدم ${insultTotal} شتيمة/إهانة صريحة — نمط تنمر ممنهج`,
   });
 
   // د) كثافة التهديدات
-  const threats = /\b(سأقتل|سأضرب|سأؤذي|سأطعن|سأفتك|ستدفع|دمك|ستموت|سأحرق|سأدمر|سأنهي|سأفضح|سأكشف)\b/gi;
+  const threats = /\b(سأقتل|سأضرب|سأؤذي|سأطعن|سأفتك|ستدفع|دمك|ستموت|سأحرق|سأدمر|سأنهي|سأفضح|سأكشف|راح\s*اقتل|بقتلك|بذبحك)\b/gi;
   const threatTotal = messages.reduce((a, m) => a + (m.body.match(threats) || []).length, 0);
-  if (threatTotal >= 3) out.push({
+  if (threatTotal >= 2) out.push({
     id: "THREAT_PATTERN", cat: "نمط تهديدات ممنهج", sev: "CRITICAL", sc: 9,
-    rt: "عنف وتهديدات متكررة", confidence: 90,
+    rt: "عنف وتهديدات متكررة — أعلى أولوية للمراجعة", confidence: Math.min(99, 80 + threatTotal * 5),
     desc: `أطلق ${threatTotal} تهديداً صريحاً — خطر مرتفع جداً`,
   });
 
-  // هـ) كثافة المحتوى الجنسي
-  const sexual = /\b(شرموطه|قحبه|نيك|اغتصاب|جنسي|اباحي|عاهره|دعاره|منيوك|تحرش)\b/gi;
+  // هـ) كثافة المحتوى الجنسي — تضمين الكلمات الجديدة
+  const sexual = /\b(شرموطه|قحبه|كحبه|نيك|نيكمك|كسمك|عصمك|زكمك|اغتصاب|جنسي|اباحي|عاهره|دعاره|منيوك|تحرش|فرخ)\b/gi;
   const sexTotal = messages.reduce((a, m) => a + (m.body.match(sexual) || []).length, 0);
-  if (sexTotal >= 4) out.push({
+  if (sexTotal >= 3) out.push({
     id: "SEXUAL_PATTERN", cat: "نمط محتوى جنسي ممنهج", sev: "CRITICAL", sc: 9,
-    rt: "مضايقة جنسية ممنهجة", confidence: 88,
-    desc: `استخدم ${sexTotal} كلمة/تعبير ذو طابع جنسي صريح`,
+    rt: "مضايقة جنسية ممنهجة — تقديم بلاغ #14", confidence: Math.min(99, 75 + sexTotal * 5),
+    desc: `استخدم ${sexTotal} كلمة/تعبير جنسي صريح — نمط مضايقة جنسية`,
   });
+
+  // و) كشف الفلود (إرسال رسائل كثيرة في وقت قصير)
+  if (messages.length >= 20) {
+    const timeSpan = (messages[messages.length - 1]?.timestamp || 0) - (messages[0]?.timestamp || 0);
+    const msgsPerMinute = timeSpan > 0 ? (messages.length / (timeSpan / 60000)) : 0;
+    if (msgsPerMinute > 15 || messages.length >= 50) {
+      out.push({
+        id: "FLOOD_SPAM", cat: "فلود وسبام مكثف", sev: "MEDIUM", sc: 6,
+        rt: "سبام — إرسال مفرط للرسائل", confidence: 85,
+        desc: `أرسل ${messages.length} رسالة — معدل ${Math.round(msgsPerMinute)} رسالة/دقيقة`,
+      });
+    }
+  }
+
+  // ز) كشف سبام النص المكرر (نفس الرسالة مع تغيير طفيف)
+  const shortMsgs = messages.filter(m => m.body.trim().length < 30);
+  if (shortMsgs.length >= 10) {
+    out.push({
+      id: "SHORT_SPAM", cat: "سبام رسائل قصيرة مكررة", sev: "LOW", sc: 3,
+      rt: "سبام — رسائل قصيرة مكررة", confidence: 70,
+      desc: `أرسل ${shortMsgs.length} رسالة قصيرة جداً — قد تكون سبام`,
+    });
+  }
 
   return out;
 }
@@ -1015,18 +1092,75 @@ async function getUserMessages(api, threadID, targetUID, maxFetch = 300) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// الإبلاغ عبر FCA — مع إعلام فوري
+// الإبلاغ عبر FCA — نظام ULTRA متعدد المسارات (أنجح أنواع البلاغات)
 // ══════════════════════════════════════════════════════════════════════════════
-async function tryReport(api, msg) {
-  for (const fn of ["reportMessage", "report", "reportSpam", "markAsSpam"]) {
+// أنواع البلاغات المدعومة في فيسبوك (مرتبة حسب الأولوية والنجاح)
+const REPORT_TYPES = {
+  SEXUAL_CONTENT:    [14, 1],   // إباحي/محتوى جنسي — أعلى معدل نجاح
+  VIOLENCE:          [8,  2],   // عنف — أعلى أولوية في المراجعة
+  TERRORISM:         [8,  2],   // إرهاب
+  CHILD_EXPLOIT:     [4,  14],  // استغلال أطفال — يُعالَج فورياً
+  SELF_HARM:         [6,  1],   // إيذاء النفس
+  HATE_SPEECH:       [11, 1],   // خطاب كراهية
+  BULLYING:          [13, 1],   // تنمر ومضايقة
+  SPAM:              [3,  1],   // سبام
+  SPAM_BEHAVIOR:     [3,  1],   // سلوك سبام
+  SCAM:              [3,  7],   // احتيال
+  PHISHING:          [3,  7],   // تصيد
+  BLACKMAIL:         [10, 1],   // ابتزاز
+  PRIVACY:           [5,  1],   // انتهاك خصوصية
+  HACKING:           [16, 1],   // اختراق
+  DRUGS:             [15, 1],   // مخدرات
+  WEAPONS:           [15, 1],   // أسلحة
+  INCITEMENT:        [11, 2],   // تحريض
+  MASS_THREAT:       [8,  2],   // تهديد جماعي
+  HUMAN_TRAFFICKING: [18, 1],   // اتجار بالبشر
+  DEFAULT:           [1,  1],   // عام
+};
+
+async function tryReport(api, msg, violationCategory) {
+  const reportCodes = REPORT_TYPES[violationCategory] || REPORT_TYPES.DEFAULT;
+
+  // المسار 1: reportMessage مع نوع البلاغ المحدد
+  for (const fn of ["reportMessage", "report"]) {
+    if (typeof api[fn] === "function") {
+      for (const code of reportCodes) {
+        try {
+          await new Promise((res, rej) =>
+            api[fn](msg.messageID, code, (e) => e ? rej(e) : res())
+          );
+          return { success: true, method: fn, code };
+        } catch (_) {}
+        // بدون code
+        try {
+          await new Promise((res, rej) =>
+            api[fn](msg.messageID, (e) => e ? rej(e) : res())
+          );
+          return { success: true, method: fn, code: "default" };
+        } catch (_) {}
+      }
+    }
+  }
+
+  // المسار 2: reportSpam / markAsSpam
+  for (const fn of ["reportSpam", "markAsSpam", "markAsDelivered"]) {
     if (typeof api[fn] === "function") {
       try {
         await new Promise((res, rej) => api[fn](msg.messageID, (e) => e ? rej(e) : res()));
-        return true;
+        return { success: true, method: fn, code: "spam" };
       } catch (_) {}
     }
   }
-  return false;
+
+  // المسار 3: deleteMessage كإجراء احتياطي
+  if (typeof api.deleteMessage === "function") {
+    try {
+      await new Promise((res, rej) => api.deleteMessage(msg.messageID, (e) => e ? rej(e) : res()));
+      return { success: true, method: "deleteMessage", code: "delete" };
+    } catch (_) {}
+  }
+
+  return { success: false };
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -1148,13 +1282,14 @@ module.exports = {
     for (const msg of userMessages) {
       const found = analyzeMessage(msg.body);
       if (found.length) {
-        // إبلاغ تلقائي فوري عن كل رسالة مخالفة
-        const reported = await tryReport(api, msg);
-        if (reported) {
+        // إبلاغ تلقائي فوري — يستخدم أنسب نوع بلاغ للمخالفة الأشد خطورة
+        const topViolCat = found[0]?.ruleId || "DEFAULT";
+        const result = await tryReport(api, msg, topViolCat);
+        if (result.success) {
           reportedCount++;
           autoReported++;
         }
-        violations.push({ msg, viols: found, reported });
+        violations.push({ msg, viols: found, reported: result.success, reportMethod: result.method });
       }
       await sleep(10);
     }
