@@ -11,7 +11,7 @@ const ACCOUNT_PATH  = path.join(__dirname, "../../account.txt");
 const CONFIG_PATH   = path.join(__dirname, "../../config.json");
 const COMMANDS_DIR  = path.join(__dirname, "../commands");
 const UPLOADS_DIR   = path.join(__dirname, "public/uploads");
-const DEFAULT_PASS  = "djamel2025*";
+const DEFAULT_PASS  = "";
 
 fs.ensureDirSync(UPLOADS_DIR);
 
@@ -85,7 +85,7 @@ function parseCookies(str = "") {
 }
 function getDashPass() {
   if (fs.existsSync(CONFIG_PATH)) {
-    try { return fs.readJsonSync(CONFIG_PATH).dashboardPassword || DEFAULT_PASS; } catch {}
+    try { return process.env.DASHBOARD_PASSWORD || fs.readJsonSync(CONFIG_PATH).dashboardPassword || DEFAULT_PASS; } catch {}
   }
   return DEFAULT_PASS;
 }
