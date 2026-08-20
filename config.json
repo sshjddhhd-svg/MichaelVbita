@@ -7,6 +7,7 @@
   ],
   "subAdminIDs": [],
   "dashboardPort": 5000,
+  "dashboardPassword": "Muzan2006*",
   "timezone": "Africa/Algiers",
   "humanTyping": {
     "enable": true
