@@ -26,21 +26,21 @@ function randInt(min, max) {
 
 module.exports = {
   config: {
-    name: "انسخ",
-    aliases: [],
+    name: "دراكاريس",
+    aliases: ["انسخ"],
     description: "تشغيل الإرسال التلقائي للرسالة كل 20-35 ثانية",
-    usage: "انسخ",
+    usage: "دراكاريس",
     adminOnly: false,
     ownerOnly: false,
     category: "auto",
   },
 
   async run({ api, threadID }) {
-    if (!global._michaelAutoJobs) global._michaelAutoJobs = new Map();
+    if (!global._dracarysAutoJobs) global._dracarysAutoJobs = new Map();
 
-    if (global._michaelAutoJobs.has(threadID)) {
+    if (global._dracarysAutoJobs.has(threadID)) {
       return api.sendMessage(
-        "⚠️ الإرسال التلقائي يعمل بالفعل في هذه المحادثة.\nاستخدم «ميكائيل توقف» لإيقافه.",
+        "⚠️ الإرسال التلقائي يعمل بالفعل في هذه المحادثة.\nاستخدم «كراكسيز توقف» لإيقافه.",
         threadID
       );
     }
@@ -52,29 +52,29 @@ module.exports = {
       const delayMs = delaySec * 1000;
 
       const t = setTimeout(async () => {
-        if (!global._michaelAutoJobs || !global._michaelAutoJobs.has(threadID)) return;
+        if (!global._dracarysAutoJobs || !global._dracarysAutoJobs.has(threadID)) return;
 
         try {
           const stopTyping = api.sendTypingIndicator(threadID);
           const typingDuration = randInt(2000, 5000);
           await sleep(typingDuration);
           if (typeof stopTyping === "function") {
-            try { stopTyping(); } catch (_) {}
+            try { stopTyping(); } catch (err) { global.log?.warn?.(`فشل إرسال الرسالة التلقائية: ${err.message || err}`); }
           }
 
-          if (!global._michaelAutoJobs || !global._michaelAutoJobs.has(threadID)) return;
+          if (!global._dracarysAutoJobs || !global._dracarysAutoJobs.has(threadID)) return;
 
           await new Promise((resolve) => {
             api.sendMessage(AUTO_MSG, threadID, (err) => resolve(err));
           });
         } catch (_) {}
 
-        if (global._michaelAutoJobs && global._michaelAutoJobs.has(threadID)) {
+        if (global._dracarysAutoJobs && global._dracarysAutoJobs.has(threadID)) {
           scheduleNext();
         }
       }, delayMs);
 
-      global._michaelAutoJobs.set(threadID, t);
+      global._dracarysAutoJobs.set(threadID, t);
     }
 
     scheduleNext();
