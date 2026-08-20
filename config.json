@@ -1,8 +1,10 @@
 {
   "botName": "jarfis",
-  "prefix": "ميكائيل",
+  "prefix": "كراكسيز",
   "ownerID": "61589172662314",
-  "adminIDs": ["61589172662314"],
+  "adminIDs": [
+    "61589172662314"
+  ],
   "subAdminIDs": [],
   "dashboardPort": 5000,
   "timezone": "Africa/Algiers",
@@ -11,7 +13,7 @@
     "enable": true
   },
   "stealth": {
-    "enable": true
+    "enable": false
   },
   "mqttHealthCheck": {
     "enable": true
