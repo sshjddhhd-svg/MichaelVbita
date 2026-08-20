@@ -13,16 +13,19 @@ module.exports = {
   },
 
   async run({ api, threadID }) {
-    if (!global._michaelAutoJobs || !global._michaelAutoJobs.has(threadID)) {
+    // دراكاريس يحفظ المؤقتات في هذه الخريطة. كان الأمر يبحث في
+    // _michaelAutoJobs، لذلك كان يرفض الإيقاف رغم أن الإرسال فعال.
+    const jobs = global._dracarysAutoJobs;
+    if (!jobs || !jobs.has(threadID)) {
       return api.sendMessage(
         "❌ لا يوجد إرسال تلقائي نشط في هذه المحادثة.",
         threadID
       );
     }
 
-    const t = global._michaelAutoJobs.get(threadID);
+    const t = jobs.get(threadID);
     clearTimeout(t);
-    global._michaelAutoJobs.delete(threadID);
+    jobs.delete(threadID);
 
     await api.sendMessage("⛔ تم إيقاف الإرسال التلقائي في هذه المحادثة.", threadID);
   },
