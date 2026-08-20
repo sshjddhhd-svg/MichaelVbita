@@ -4,7 +4,24 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 function randInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
 
 // ─── Polling interval ─────────────────────────────────────────────────────────
-const POLL_MS = 20000; // فحص الكنيات كل 20 ثانية
+const POLL_MS = 5000; // فحص سريع احتياطي، بالإضافة إلى أحداث المجموعة
+const MAX_ATTEMPTS = 5;
+
+async function changeNicknameWithRetry(api, nickname, threadID, uid) {
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      await new Promise((resolve, reject) =>
+        api.changeNickname(nickname, threadID, uid, (error) =>
+          error ? reject(error) : resolve()
+        )
+      );
+      return true;
+    } catch (_) {
+      if (attempt < MAX_ATTEMPTS) await sleep(700 * attempt);
+    }
+  }
+  return false;
+}
 
 /**
  * يستخرج الكنيات الحالية من معلومات المجموعة
@@ -89,9 +106,7 @@ function startNickPoller(threadID) {
           try {
             await sleep(randInt(800, 2500));
             if (!global._perMemberNicknames?.get(threadID)?.has(uidRef)) return;
-            await new Promise((res, rej) =>
-              api.changeNickname(nickRef, threadID, uidRef, (e) => (e ? rej(e) : res()))
-            );
+            await changeNicknameWithRetry(api, nickRef, threadID, uidRef);
           } catch (_) {}
           setTimeout(() => global._nickRestoring?.delete(restoreKey), 5000);
         })();
@@ -175,27 +190,39 @@ module.exports = {
       threadID
     );
 
-    // ── تغيير الكنيات واحدة تلو الأخرى ──────────────────────────────────────
+    // ── تغيير الكنيات واحدة تلو الأخرى مع إعادة المحاولة ────────────────────
     let changed = 0;
     for (const uid of participants) {
       if (!global._perMemberNicknames.has(threadID)) break;
       try {
-        await sleep(randInt(600, 1800));
-        await new Promise((res, rej) =>
-          api.changeNickname(nickname, threadID, uid, (e) => (e ? rej(e) : res()))
-        );
-        changed++;
+        await sleep(randInt(300, 700));
+        if (await changeNicknameWithRetry(api, nickname, threadID, uid)) changed++;
       } catch (_) {}
     }
 
-    // ── تشغيل الـ poller المزدوج ─────────────────────────────────────────────
+    // تحقق إضافي من الأعضاء الذين فشلوا في المحاولة الأولى، حتى لا يبقى
+    // القفل مسجلاً بينما بعض الكنيات لم تتغير فعلياً.
+    for (const uid of participants) {
+      if (!global._perMemberNicknames.has(threadID)) break;
+      try {
+        const info = await new Promise((res, rej) =>
+          api.getThreadInfo(threadID, (e, d) => e ? rej(e) : res(d))
+        );
+        const current = extractNicknames(info).get(uid);
+        if (current !== nickname && await changeNicknameWithRetry(api, nickname, threadID, uid)) {
+          changed++;
+        }
+      } catch (_) {}
+    }
+
+    // ── تشغيل المراقبة المستمرة ─────────────────────────────────────────────
     startNickPoller(threadID);
 
     if (global._perMemberNicknames.has(threadID)) {
       api.sendMessage(
         `✅ تم تغيير ${changed}/${participants.length} كنية إلى "${nickname}".\n\n` +
         `🔒 الكنيات مقفلة — ستُعاد تلقائياً إذا غيّرها أي شخص.\n` +
-        `👑 الأدمنز يمكنهم تغيير كنية عضو وسيُحفظ التغيير كقفل جديد له.\n` +
+        `🚫 أي تغيير من أي شخص سيُعاد تلقائياً إلى الكنية المقفلة.\n` +
         `لإيقاف القفل: كنيات ايقاف`,
         threadID
       );
