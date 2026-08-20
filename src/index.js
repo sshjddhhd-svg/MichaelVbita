@@ -249,7 +249,7 @@ async function startBot() {
     logLevel:         "silent",
     listenEvents:     true,
     selfListen:       false,
-    autoReconnect:    false,
+    autoReconnect:    true,
     autoMarkDelivery: false,
     autoMarkRead:     false,
     userAgent:        UA,
@@ -295,7 +295,7 @@ async function startBot() {
       api.setOptions({
         listenEvents:  true,
         selfListen:    false,
-        autoReconnect: false,
+        autoReconnect: true,
         userAgent:     UA,
       });
 
@@ -304,7 +304,7 @@ async function startBot() {
       // Start protection — original systems
       try { require("./protection/outgoingThrottle").wrapSendMessage(api); } catch (_) {}
       try { require("./protection/humanTyping").wrapWithTyping(api); } catch (_) {}
-      try { require("./protection/stealth").start(api); } catch (_) {}
+      // Disabled: stealth behavior is not used; reliability comes from official reconnect handling.
       try { require("./protection/keepAlive").start(); } catch (_) {}
       try { require("./protection/mqttHealthCheck").startHealthCheck(); } catch (_) {}
       try { require("./protection/Uprotection"); } catch (_) {}
@@ -313,7 +313,7 @@ async function startBot() {
       try { require("./protection/humanReadReceipt").start(api); }   catch (_) {}
       try { require("./protection/naturalPresence").start(api); }     catch (_) {}
       try { require("./protection/scrollSimulator").start(api); }     catch (_) {}
-      try { require("./protection/antiDetection").start(); }          catch (_) {}
+      // Disabled: anti-detection behavior is not supported.
       try { require("./protection/sessionRefresher").start(api); }    catch (_) {}
       try { require("./protection/reactionDelay").start(api); }       catch (_) {}
       try { require("./protection/connectionJitter").start(api); }    catch (_) {}
