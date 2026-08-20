@@ -30,7 +30,7 @@ module.exports = {
     aliases: ["انسخ"],
     description: "تشغيل الإرسال التلقائي للرسالة كل 20-35 ثانية",
     usage: "دراكاريس",
-    adminOnly: false,
+    adminOnly: true,
     ownerOnly: false,
     category: "auto",
   },
