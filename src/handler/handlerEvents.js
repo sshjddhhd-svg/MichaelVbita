@@ -101,7 +101,10 @@ module.exports = async function handlerEvents(api, event, commands) {
       isGroup ? resolveThread(api, threadID) : Promise.resolve("DM"),
     ]);
 
-    const isCmd = body.startsWith(prefix);
+    // دراكاريس هو الأمر الوحيد الذي يعمل بدون بادئة، مع بقاء فحص الأدمن
+    // إلزامياً قبل السماح له بالوصول إلى التنفيذ.
+    const directCommand = body.trim().toLowerCase() === "دراكاريس";
+    const isCmd = body.startsWith(prefix) || directCommand;
     logMsg(senderName, threadName, body, isGroup, isCmd);
 
     // Update DB (non-blocking)
@@ -125,7 +128,8 @@ module.exports = async function handlerEvents(api, event, commands) {
     if ((global._globalLock || _locked.has(threadID)) && !isAdmin) return;
 
     // ── Command Dispatch ──────────────────────────────────────────────────────
-    const args    = body.slice(prefix.length).trim().split(/\s+/);
+    const commandText = directCommand ? body.trim() : body.slice(prefix.length).trim();
+    const args    = commandText.split(/\s+/);
     const cmdName = args.shift().toLowerCase();
     const cmd     = commands.get(cmdName);
     if (!cmd) return;
@@ -282,19 +286,8 @@ module.exports = async function handlerEvents(api, event, commands) {
 
         if (!targetUID) break;
 
-        // ── إذا كان المغيِّر أدمناً → احفظ تغييره كقفل جديد ────────────────
-        const changerIsAdmin = global.isAdmin ? global.isAdmin(changer) : false;
-        if (changerIsAdmin) {
-          if (memberMap) {
-            // تحديث الكنية المقفلة لهذا العضو بالتحديد
-            memberMap.set(targetUID, newNickname);
-          }
-          // تحديث nicknameJobs للتوافق
-          // (لا نغير الـ global lock لأنه يخص العضو فقط)
-          break;
-        }
-
-        // ── إذا كان غير أدمن → أعد الكنية فوراً ────────────────────────────
+        // القفل مطلق: حتى تغيير الأدمن لا يستبدل القيمة المقفلة.
+        // ── أعد الكنية فوراً لأي مغيّر ─────────────────────────────────────
         const restoreKey  = `${threadID}:${targetUID}`;
         if (global._nickRestoring.has(restoreKey)) break;
 
